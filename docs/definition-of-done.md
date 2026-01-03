@@ -1,0 +1,1 @@
+No PR merges unless: schemas exist for all supported item types, validators exist, and generation is blocked when validation fails.

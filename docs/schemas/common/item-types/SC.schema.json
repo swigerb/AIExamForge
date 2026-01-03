@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/SC.schema.json",
+  "title": "SC",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sentence",
+    "underlinedText",
+    "choices",
+    "correctChoiceKey",
+    "randomizeChoices",
+    "mustIncludeNoChangeAsFirstChoice"
+  ],
+  "properties": {
+    "sentence": { "type": "string", "minLength": 5 },
+    "underlinedText": { "type": "string", "minLength": 1 },
+    "mustIncludeNoChangeAsFirstChoice": { "type": "boolean", "const": true },
+    "choices": {
+      "type": "array",
+      "minItems": 4,
+      "description": "Includes 'No change is needed.' plus at least 2 distractors and 1 correct answer.",
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" }
+    },
+    "correctChoiceKey": { "type": "string", "pattern": "^[A-Z]$" },
+    "randomizeChoices": { "type": "boolean", "const": false }
+  }
+}

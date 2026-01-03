@@ -1,0 +1,650 @@
+openapi: 3.0.3
+info:
+  title: AIExamForge API
+  description: |
+    API for generating practice exam questions from Microsoft Learn content.
+    
+    **MCP-Exclusive Content**: All question content is derived exclusively from 
+    Microsoft Learn documentation via the MCP server. No fallback to model knowledge.
+  version: 1.0.0
+  contact:
+    name: AIExamForge Team
+
+servers:
+  - url: https://aiexamforge.azurewebsites.net/api
+    description: Production
+  - url: http://localhost:5000/api
+    description: Local development
+
+tags:
+  - name: Outlines
+    description: Exam outline parsing and management
+  - name: Generations
+    description: Question generation operations
+  - name: Exports
+    description: Export question sets to various formats
+
+paths:
+  /outlines/parse:
+    post:
+      tags: [Outlines]
+      summary: Parse text outline
+      description: Parse plain text exam outline into hierarchical structure
+      operationId: parseOutline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseOutlineRequest'
+      responses:
+        '200':
+          description: Successfully parsed outline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutlineResponse'
+        '400':
+          description: Invalid input (too large, malformed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Payload too large (>500 KB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /outlines/upload:
+    post:
+      tags: [Outlines]
+      summary: Upload document outline
+      description: |
+        Upload a .docx or .pdf file and extract text for outline parsing.
+        
+        **Supported formats**: .docx, .pdf
+        **Max file size**: 10 MB
+        **Password-protected PDFs**: Not supported (returns 400)
+      operationId: uploadOutline
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file (.docx or .pdf)
+                examName:
+                  type: string
+                  maxLength: 256
+                  description: Optional exam name
+      responses:
+        '200':
+          description: Successfully extracted and parsed outline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutlineResponse'
+        '400':
+          description: |
+            Invalid file:
+            - Unsupported format (not .docx or .pdf)
+            - Password-protected PDF
+            - Corrupted file
+            - Extraction failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: File too large (>10 MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /outlines/{outlineId}:
+    get:
+      tags: [Outlines]
+      summary: Get outline by ID
+      operationId: getOutline
+      parameters:
+        - name: outlineId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Outline found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutlineResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Outline not found
+
+  /generations:
+    post:
+      tags: [Generations]
+      summary: Start question generation
+      description: |
+        Start generating questions for selected outline sections.
+        
+        **MCP-Exclusive**: Questions are generated only from Microsoft Learn content.
+        If MCP returns insufficient content for any topic, those questions will not
+        be generated and a note will be included in the response.
+        
+        **Rate limits**: 
+        - Max 10 requests per minute per user
+        - Max 100 questions per day per user
+      operationId: startGeneration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationRequest'
+      responses:
+        '202':
+          description: Generation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationStartResponse'
+        '400':
+          description: Invalid request (invalid node IDs, exceeds limits)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: |
+            Unable to generate questions:
+            - MCP returned insufficient content for all selected topics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /generations/{generationId}:
+    get:
+      tags: [Generations]
+      summary: Get generation status and results
+      operationId: getGeneration
+      parameters:
+        - name: generationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Generation status/results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Generation not found
+
+  /generations/{generationId}/stream:
+    get:
+      tags: [Generations]
+      summary: Stream generation progress
+      description: |
+        Server-Sent Events stream for real-time generation progress.
+        
+        **Events**:
+        - `progress`: Generation progress update
+        - `question`: New question generated
+        - `complete`: Generation finished
+        - `error`: Generation failed
+      operationId: streamGeneration
+      parameters:
+        - name: generationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Generation not found
+
+  /questions/{generationId}/export:
+    get:
+      tags: [Exports]
+      summary: Export question set
+      description: |
+        Export generated questions in the specified format.
+        
+        **Formats**: json, markdown, docx, pdf
+        
+        **Render Modes**:
+        - Exam: Export without rationales/explanations (simulates real exam)
+        - Study: Export with rationales in separate section (default)
+        
+        **Export contents**:
+        - Title page (Word/PDF only)
+        - Formatted questions with type labels
+        - Correct answers
+        - Explanations (Study mode only)
+        - Visible disclaimer
+        
+        **Excluded from exports**:
+        - Internal MCP reference IDs
+        - System prompts
+        - Debug information
+      operationId: exportQuestions
+      parameters:
+        - name: generationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [json, markdown, docx, pdf]
+        - name: renderMode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Exam, Study]
+            default: Study
+          description: |
+            - Exam: No rationales/explanations
+            - Study: Rationales in separate section (default)
+      responses:
+        '200':
+          description: Export file
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              example: attachment; filename="questions.pdf"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportedQuestionSet'
+            text/markdown:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid format parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Generation not found or not completed
+
+  /health:
+    get:
+      summary: Health check
+      description: Returns service health status and dependency checks
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Microsoft Entra ID JWT token
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ParseOutlineRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 512000
+          description: Plain text exam outline
+        examName:
+          type: string
+          maxLength: 256
+          description: Optional exam name (e.g., "AZ-204")
+
+    OutlineResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        examName:
+          type: string
+        sourceType:
+          type: string
+          enum: [TextPaste, DocxUpload, PdfUpload]
+        sourceFileName:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutlineNode'
+        createdAt:
+          type: string
+          format: date-time
+
+    OutlineNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        level:
+          type: integer
+          minimum: 1
+          maximum: 10
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutlineNode'
+
+    GenerationRequest:
+      type: object
+      required: [outlineId, selectedNodeIds, questionCount, questionTypes]
+      properties:
+        outlineId:
+          type: string
+          format: uuid
+        selectedNodeIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+        questionCount:
+          type: integer
+          minimum: 1
+          maximum: 50
+        questionTypes:
+          type: array
+          items:
+            type: string
+            enum: [M1, BA, DA, SC, DOMC, CHOOSE_N, AS, BL, MW, HA, DD, MG, GI, MS, PA, CA, AN, LABS, SA]
+          minItems: 1
+          description: |
+            Item type codes:
+            - M1: Multiple Choice Select One
+            - BA: Best Answer
+            - DA: Dynamic Answer Choice
+            - SC: Sentence Correction
+            - DOMC: Dynamic Option Multiple Choice
+            - CHOOSE_N: Multiple-Alphabetic/Choose n
+            - AS: Active Screen
+            - BL: Build List
+            - MW: Magnetic Words
+            - HA: Hot Area
+            - DD: Drag and Drop
+            - MG: Matching
+            - GI: Graphics Interpretation
+            - MS: Multi-Source Reasoning
+            - PA: Two-Part Analysis
+            - CA: Code/Table Analysis
+            - AN: Statement Analysis
+            - LABS: Task-Based Labs
+            - SA: Short Answer Code
+        renderMode:
+          type: string
+          enum: [Exam, Study]
+          default: Study
+          description: |
+            - Exam: Export without rationales/explanations
+            - Study: Export with rationales in separate section (default)
+        difficulty:
+          $ref: '#/components/schemas/DifficultyDistribution'
+        toneProfile:
+          type: string
+          enum: [concise, professional, exam-like]
+
+    DifficultyDistribution:
+      type: object
+      properties:
+        easyPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        mediumPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        hardPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    GenerationStartResponse:
+      type: object
+      properties:
+        generationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [Pending]
+        streamUrl:
+          type: string
+          format: uri
+
+    GenerationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [Pending, InProgress, Completed, Failed, Cancelled]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        errorMessage:
+          type: string
+        questionSet:
+          $ref: '#/components/schemas/QuestionSet'
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        insufficientContentNotes:
+          type: array
+          items:
+            type: string
+          description: Topics where MCP returned insufficient content
+
+    QuestionSet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        totalQuestions:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+        availableExportFormats:
+          type: array
+          items:
+            type: string
+            enum: [json, markdown, docx, pdf]
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayId:
+          type: string
+          example: Q001
+        itemTypeCode:
+          type: string
+          enum: [M1, BA, DA, SC, DOMC, CHOOSE_N, AS, BL, MW, HA, DD, MG, GI, MS, PA, CA, AN, LABS, SA]
+          description: Item type code (required)
+        typeDisplayName:
+          type: string
+          description: Human-readable type name
+        sourceNodeTitle:
+          type: string
+        difficulty:
+          type: string
+          enum: [Easy, Medium, Hard]
+        content:
+          type: object
+          description: Type-specific question content (validated against item-type schema)
+        explanation:
+          type: string
+          description: Rationale (included only in Study mode exports)
+
+    ExportedQuestionSet:
+      type: object
+      description: JSON export format
+      properties:
+        metadata:
+          type: object
+          properties:
+            examName:
+              type: string
+            generatedAt:
+              type: string
+              format: date-time
+            totalQuestions:
+              type: integer
+            disclaimer:
+              type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [Healthy, Degraded, Unhealthy]
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [Healthy, Unhealthy]
+            blobStorage:
+              type: string
+              enum: [Healthy, Unhealthy]
+            mcpService:
+              type: string
+              enum: [Healthy, Unhealthy]
+            openAiService:
+              type: string
+              enum: [Healthy, Unhealthy]
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+security:
+  - bearerAuth: []

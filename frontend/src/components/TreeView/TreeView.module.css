@@ -1,0 +1,128 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: var(--color-background-muted);
+  border-radius: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.toolbarButton {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.toolbarButton:hover {
+  background-color: var(--color-background-hover);
+  border-color: var(--color-primary);
+}
+
+.toolbarButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.toolbarDivider {
+  width: 1px;
+  background-color: var(--color-border);
+  margin: 0 0.25rem;
+}
+
+.tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 2px solid var(--color-border);
+  border-radius: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.treeNode {
+  list-style: none;
+}
+
+.nodeContent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  padding-left: calc(0.75rem + var(--level, 0) * 1.5rem);
+  transition: background-color 0.2s;
+}
+
+.nodeContent:hover {
+  background-color: var(--color-background-hover);
+}
+
+.expandButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.expandButton:hover {
+  background-color: var(--color-background-muted);
+  color: var(--color-text);
+}
+
+.expandButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.expandIcon {
+  font-size: 0.625rem;
+  transition: transform 0.2s;
+}
+
+.expanded {
+  transform: rotate(90deg);
+}
+
+.expandSpacer {
+  width: 1.5rem;
+  flex-shrink: 0;
+}
+
+.childList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.summary {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: right;
+  padding: 0.25rem 0;
+}

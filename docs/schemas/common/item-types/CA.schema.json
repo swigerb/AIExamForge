@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/CA.schema.json",
+  "title": "CA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["exhibitText", "statements", "correctYesNo"],
+  "properties": {
+    "exhibitText": { "type": "string", "minLength": 10 },
+    "statements": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 5 }
+    },
+    "correctYesNo": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "boolean" }
+    }
+  }
+}

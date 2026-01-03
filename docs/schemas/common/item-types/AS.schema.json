@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/AS.schema.json",
+  "title": "AS",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["screenshotAltText", "activeAreas"],
+  "properties": {
+    "screenshotAltText": { "type": "string", "minLength": 10 },
+    "activeAreas": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "actionType", "expectedValue"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "actionType": { "type": "string", "enum": ["click", "select", "toggle", "dragdrop"] },
+          "expectedValue": { "type": ["string", "boolean", "number", "null"] }
+        }
+      }
+    }
+  }
+}

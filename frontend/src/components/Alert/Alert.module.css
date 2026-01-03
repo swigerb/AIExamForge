@@ -1,0 +1,80 @@
+.alert {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid;
+}
+
+.icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.message {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.dismissButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  font-size: 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.dismissButton:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dismissButton:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Variants */
+.info {
+  background-color: var(--color-info-background);
+  border-color: var(--color-info-border);
+  color: var(--color-info-text);
+}
+
+.success {
+  background-color: var(--color-success-background);
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+}
+
+.warning {
+  background-color: var(--color-warning-background);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-text);
+}
+
+.error {
+  background-color: var(--color-error-background);
+  border-color: var(--color-error-border);
+  color: var(--color-error-text);
+}

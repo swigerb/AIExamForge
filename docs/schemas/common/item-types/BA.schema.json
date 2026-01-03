@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/BA.schema.json",
+  "title": "BA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choices", "correctChoiceKey", "bestAnswerCueRequired", "randomizeChoices"],
+  "properties": {
+    "bestAnswerCueRequired": {
+      "type": "boolean",
+      "const": true,
+      "description": "The stem must instruct the learner to select the BEST answer."
+    },
+    "choices": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" }
+    },
+    "correctChoiceKey": { "type": "string", "pattern": "^[A-Z]$" },
+    "randomizeChoices": { "type": "boolean", "default": true }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/CHOOSE_N.schema.json",
+  "title": "ChooseN",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requiredSelectionCount", "solutionCompleteness", "choices", "correctChoiceKeys"],
+  "properties": {
+    "requiredSelectionCount": { "type": "integer", "minimum": 2, "maximum": 10 },
+    "solutionCompleteness": {
+      "type": "string",
+      "enum": ["partial", "complete"],
+      "description": "Whether each correct answer is part of the solution or a complete solution."
+    },
+    "choices": {
+      "type": "array",
+      "minItems": 4,
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" }
+    },
+    "correctChoiceKeys": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "pattern": "^[A-Z]$" },
+      "uniqueItems": true
+    }
+  }
+}

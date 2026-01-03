@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/AN.schema.json",
+  "title": "AN",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["statements", "correctYesNo"],
+  "properties": {
+    "statements": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 5 }
+    },
+    "correctYesNo": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "boolean" }
+    }
+  }
+}

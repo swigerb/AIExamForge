@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/GI.schema.json",
+  "title": "GI",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["graphicAltText", "prompts", "dropdowns", "correctAnswers"],
+  "properties": {
+    "graphicAltText": { "type": "string", "minLength": 10 },
+    "prompts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 5 }
+    },
+    "dropdowns": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 5,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
+    "correctAnswers": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["promptIndex", "dropdownIndex", "choiceIndex"],
+        "properties": {
+          "promptIndex": { "type": "integer", "minimum": 0 },
+          "dropdownIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "choiceIndex": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

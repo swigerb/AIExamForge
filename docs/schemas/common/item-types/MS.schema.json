@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/MS.schema.json",
+  "title": "MS",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sources", "statements", "correctYesNo"],
+  "properties": {
+    "sources": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "contentText"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 2 },
+          "contentText": { "type": "string", "minLength": 5 }
+        }
+      }
+    },
+    "statements": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "string", "minLength": 5 }
+    },
+    "correctYesNo": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "boolean" },
+      "description": "Parallel array to statements."
+    }
+  }
+}

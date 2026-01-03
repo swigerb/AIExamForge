@@ -1,0 +1,106 @@
+.stepper {
+  width: 100%;
+}
+
+.stepList {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.stepItem:last-child {
+  flex: 0;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.stepIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
+}
+
+.stepLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+/* States */
+.pending .stepIndicator {
+  background-color: var(--color-background-muted);
+  color: var(--color-text-muted);
+  border: 2px solid var(--color-border);
+}
+
+.pending .stepLabel {
+  color: var(--color-text-muted);
+}
+
+.current .stepIndicator {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
+}
+
+.current .stepLabel {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.completed .stepIndicator {
+  background-color: var(--color-success);
+  color: white;
+  border: 2px solid var(--color-success);
+}
+
+.completed .stepLabel {
+  color: var(--color-success);
+}
+
+.connector {
+  flex: 1;
+  height: 2px;
+  background-color: var(--color-border);
+  margin: 0 0.5rem;
+  margin-bottom: 1.75rem; /* Offset for label */
+  transition: background-color 0.3s ease;
+}
+
+.connectorCompleted {
+  background-color: var(--color-success);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .stepLabel {
+    display: none;
+  }
+
+  .connector {
+    margin-bottom: 0;
+  }
+}

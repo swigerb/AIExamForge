@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/DA.schema.json",
+  "title": "DA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correctAnswers",
+    "distractors",
+    "presentedDistractorCountRule"
+  ],
+  "properties": {
+    "correctAnswers": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" },
+      "description": "At runtime only one of these is shown."
+    },
+    "distractors": {
+      "type": "array",
+      "minItems": 6,
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" }
+    },
+    "presentedDistractorCountRule": {
+      "type": "string",
+      "enum": ["if<=8_then2_else3"],
+      "description": "If 8 or fewer distractors authored show 2; otherwise show 3."
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/PA.schema.json",
+  "title": "PA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rows", "columnAOptions", "columnBOptions", "correctSelections"],
+  "properties": {
+    "rows": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "columnAOptions": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "columnBOptions": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "correctSelections": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rowIndex", "columnAIndex", "columnBIndex"],
+        "properties": {
+          "rowIndex": { "type": "integer", "minimum": 0 },
+          "columnAIndex": { "type": "integer", "minimum": 0 },
+          "columnBIndex": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+name: aiexamforge
+metadata:
+  template: aiexamforge@0.0.1
+
+services:
+  api:
+    project: ./backend/src/AIExamForge.Api
+    language: dotnet
+    host: appservice
+
+  web:
+    project: ./frontend
+    dist: dist
+    language: js
+    host: staticwebapp
+
+hooks:
+  preprovision:
+    shell: pwsh
+    run: |
+      Write-Host "Preparing AIExamForge deployment..."
+
+  postprovision:
+    shell: pwsh
+    run: |
+      # Set the API base URL for the frontend
+      $apiUrl = azd env get-value API_BASE_URL
+      if ($apiUrl) {
+        azd env set VITE_API_BASE_URL $apiUrl
+      }

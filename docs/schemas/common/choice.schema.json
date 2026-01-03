@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/common/choice.schema.json",
+  "title": "Choice",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["key", "text"],
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Stable choice key (A, B, C...)",
+      "pattern": "^[A-Z]$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Choice text (no explanations)"
+    }
+  }
+}

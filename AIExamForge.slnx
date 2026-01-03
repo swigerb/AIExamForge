@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/backend/" />
+  <Folder Name="/backend/src/">
+    <Project Path="backend/src/AIExamForge.Api/AIExamForge.Api.csproj" />
+    <Project Path="backend/src/AIExamForge.Application/AIExamForge.Application.csproj" />
+    <Project Path="backend/src/AIExamForge.Domain/AIExamForge.Domain.csproj" />
+    <Project Path="backend/src/AIExamForge.Infrastructure/AIExamForge.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/backend/tests/">
+    <Project Path="backend/tests/AIExamForge.ContractTests/AIExamForge.ContractTests.csproj" />
+    <Project Path="backend/tests/AIExamForge.IntegrationTests/AIExamForge.IntegrationTests.csproj" />
+    <Project Path="backend/tests/AIExamForge.UnitTests/AIExamForge.UnitTests.csproj" />
+  </Folder>
+</Solution>

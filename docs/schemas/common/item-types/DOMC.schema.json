@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/DOMC.schema.json",
+  "title": "DOMC",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "problemStatement",
+    "variants",
+    "deliveryVariantCount",
+    "yesLabel",
+    "noLabel"
+  ],
+  "properties": {
+    "problemStatement": { "type": "string", "minLength": 10 },
+    "deliveryVariantCount": { "type": "integer", "const": 3 },
+    "yesLabel": { "type": "string", "const": "Yes" },
+    "noLabel": { "type": "string", "const": "No" },
+    "variants": {
+      "type": "array",
+      "minItems": 4,
+      "description": "At least 1 correct and at least 3 incorrect variants.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["solutionText", "isSolutionCorrect"],
+        "properties": {
+          "solutionText": { "type": "string", "minLength": 5 },
+          "isSolutionCorrect": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "At least one correct and at least three incorrect solutions",
+      "properties": {},
+      "unevaluatedProperties": false
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/DD.schema.json",
+  "title": "DD",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sources", "targets", "sourceUsagePolicy", "correctPlacements"],
+  "properties": {
+    "sources": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "sourceUsagePolicy": {
+      "type": "string",
+      "enum": ["useOnce", "reuseAllowed", "unusedAllowed", "reuseAndUnusedAllowed"],
+      "description": "Instruction must specify reuse/unused policy."
+    },
+    "correctPlacements": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetId", "sourceId"],
+        "properties": {
+          "targetId": { "type": "string", "minLength": 1 },
+          "sourceId": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

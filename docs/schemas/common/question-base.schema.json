@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/common/question-base.schema.json",
+  "title": "QuestionBase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "itemTypeCode",
+    "title",
+    "stem",
+    "difficulty",
+    "tags",
+    "scoring",
+    "content"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the question",
+      "minLength": 8
+    },
+    "itemTypeCode": {
+      "type": "string",
+      "description": "Short item type code (e.g., M1, SC, DD)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short display title for the question",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "stem": {
+      "type": "string",
+      "description": "The exam item stem/scenario text (no explanations/teaching text)",
+      "minLength": 10
+    },
+    "instruction": {
+      "type": "string",
+      "description": "Optional instruction statement shown before the stem when required by item type"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"]
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exam", "objective", "section"],
+      "properties": {
+        "exam": { "type": "string", "minLength": 2 },
+        "objective": { "type": "string", "minLength": 2 },
+        "section": { "type": "string", "minLength": 2 },
+        "topics": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 2 },
+          "maxItems": 20
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {
+        "model": { "type": "string", "enum": ["dichotomous", "polytomous"] },
+        "maxPoints": { "type": "integer", "minimum": 1, "maximum": 20 }
+      }
+    },
+    "content": {
+      "type": "object",
+      "description": "Item-type-specific content. Must match the schema for itemTypeCode."
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Study-mode explanation only. Must not be embedded in stem/choices."
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/item-types/M1.schema.json",
+  "title": "M1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choices", "correctChoiceKey", "randomizeChoices"],
+  "properties": {
+    "choices": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "https://aiexamforge/schemas/common/choice.schema.json" }
+    },
+    "correctChoiceKey": { "type": "string", "pattern": "^[A-Z]$" },
+    "randomizeChoices": { "type": "boolean", "default": true }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiexamforge/schemas/question.schema.json",
+  "title": "Question",
+  "type": "object",
+  "additionalProperties": false,
+
+  "allOf": [
+    { "$ref": "https://aiexamforge/schemas/common/question-base.schema.json" },
+    {
+      "type": "object",
+      "required": ["itemTypeCode", "content"],
+      "properties": {
+        "itemTypeCode": {
+          "type": "string",
+          "enum": ["M1", "BA", "DA", "SC", "DOMC", "CHOOSE_N", "AS", "BL", "MW", "HA", "DD", "MG", "GI", "MS", "PA", "CA", "AN", "LABS", "SA"]
+        },
+        "content": { "type": "object" }
+      }
+    }
+  ],
+
+  "oneOf": [
+    {
+      "description": "M1",
+      "properties": { "itemTypeCode": { "const": "M1" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/M1.schema.json" } }
+    },
+    {
+      "description": "BA",
+      "properties": { "itemTypeCode": { "const": "BA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/BA.schema.json" } }
+    },
+    {
+      "description": "DA",
+      "properties": { "itemTypeCode": { "const": "DA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/DA.schema.json" } }
+    },
+    {
+      "description": "SC",
+      "properties": { "itemTypeCode": { "const": "SC" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/SC.schema.json" } }
+    },
+    {
+      "description": "DOMC",
+      "properties": { "itemTypeCode": { "const": "DOMC" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/DOMC.schema.json" } }
+    },
+    {
+      "description": "CHOOSE_N (M2/M3/...)",
+      "properties": { "itemTypeCode": { "const": "CHOOSE_N" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/CHOOSE_N.schema.json" } }
+    },
+    {
+      "description": "AS",
+      "properties": { "itemTypeCode": { "const": "AS" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/AS.schema.json" } }
+    },
+    {
+      "description": "BL",
+      "properties": { "itemTypeCode": { "const": "BL" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/BL.schema.json" } }
+    },
+    {
+      "description": "MW",
+      "properties": { "itemTypeCode": { "const": "MW" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/MW.schema.json" } }
+    },
+    {
+      "description": "HA",
+      "properties": { "itemTypeCode": { "const": "HA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/HA.schema.json" } }
+    },
+    {
+      "description": "DD",
+      "properties": { "itemTypeCode": { "const": "DD" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/DD.schema.json" } }
+    },
+    {
+      "description": "MG",
+      "properties": { "itemTypeCode": { "const": "MG" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/MG.schema.json" } }
+    },
+    {
+      "description": "GI",
+      "properties": { "itemTypeCode": { "const": "GI" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/GI.schema.json" } }
+    },
+    {
+      "description": "MS",
+      "properties": { "itemTypeCode": { "const": "MS" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/MS.schema.json" } }
+    },
+    {
+      "description": "PA",
+      "properties": { "itemTypeCode": { "const": "PA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/PA.schema.json" } }
+    },
+    {
+      "description": "CA",
+      "properties": { "itemTypeCode": { "const": "CA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/CA.schema.json" } }
+    },
+    {
+      "description": "AN",
+      "properties": { "itemTypeCode": { "const": "AN" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/AN.schema.json" } }
+    },
+    {
+      "description": "LABS",
+      "properties": { "itemTypeCode": { "const": "LABS" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/LABS.schema.json" } }
+    },
+    {
+      "description": "SA",
+      "properties": { "itemTypeCode": { "const": "SA" }, "content": { "$ref": "https://aiexamforge/schemas/item-types/SA.schema.json" } }
+    }
+  ]
+}
