@@ -1,7 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { Stepper } from '../components';
 import type { Step } from '../components/Stepper';
-import logo from '../assets/logo.png';
 import styles from './AppLayout.module.css';
 
 const STEPS: Step[] = [
@@ -38,7 +37,6 @@ export function AppLayout() {
       <header className={styles.header}>
         <div className={styles.headerContent}>
           <a href="/" className={styles.logo} aria-label="AI Exam Forge Home">
-            <img src={logo} alt="AI Exam Forge" className={styles.logoImage} />
             <span className={styles.logoText}>AI Exam Forge</span>
           </a>
           <nav className={styles.stepperNav} aria-label="Generation progress">
