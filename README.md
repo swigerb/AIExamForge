@@ -45,6 +45,90 @@ cd src/AIExamForge.Api
 dotnet run
 ```
 
+## Azure Deployment
+
+AIExamForge is configured for deployment using the [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/).
+
+### Prerequisites
+
+1. **Azure Developer CLI** - Install from [aka.ms/azd-install](https://aka.ms/azd-install)
+2. **Azure subscription** - With permissions to create resources
+3. **.NET 10.0 SDK** - For building the backend
+4. **Node.js 20.x** - For building the frontend
+
+### Deploy with `azd up`
+
+The `azd up` command provisions all Azure resources and deploys the application in a single step:
+
+```bash
+# Login to Azure
+azd auth login
+
+# Initialize and deploy (first time)
+azd up
+```
+
+You'll be prompted to:
+- Select an Azure subscription
+- Choose a deployment region
+- Provide an environment name (e.g., `dev`, `prod`)
+
+### What Gets Deployed
+
+| Resource | Description |
+|----------|-------------|
+| **Azure App Service** | Hosts the .NET API backend |
+| **Azure Static Web App** | Hosts the React frontend |
+| **Azure OpenAI Service** | Powers question generation (GPT-4) |
+| **Azure Key Vault** | Securely stores secrets and API keys |
+| **Azure Storage Account** | Stores uploaded outlines and generated content |
+| **Application Insights** | Monitoring and diagnostics |
+| **Log Analytics Workspace** | Centralized logging |
+
+### Common `azd` Commands
+
+```bash
+# Deploy code changes only (skip infrastructure)
+azd deploy
+
+# View deployed resources
+azd show
+
+# Open the deployed application in browser
+azd monitor --overview
+
+# Tear down all resources
+azd down
+
+# Set environment variables
+azd env set VARIABLE_NAME value
+
+# View current environment
+azd env list
+```
+
+### Environment Configuration
+
+After deployment, configure the required secrets in Azure Key Vault:
+
+```bash
+# Get the Key Vault name
+azd env get-values | grep AZURE_KEY_VAULT_NAME
+
+# Add secrets via Azure CLI
+az keyvault secret set --vault-name <your-keyvault> --name "AzureOpenAI--ApiKey" --value "<your-key>"
+```
+
+### Cost Considerations
+
+The default deployment uses:
+- **App Service**: Basic tier (B1)
+- **Static Web App**: Free tier
+- **Azure OpenAI**: Pay-as-you-go pricing
+- **Storage**: Standard LRS
+
+For production workloads, consider upgrading the App Service plan and enabling autoscaling.
+
 ## MCP Dependency
 
 ### What is MCP?
