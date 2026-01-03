@@ -2,9 +2,21 @@
   <img src="frontend/src/assets/logo.png" alt="AI Exam Forge" width="400" />
 </p>
 
-# AI Exam Forge
+<h1 align="center">AI Exam Forge</h1>
 
-AI-powered exam question generator using Microsoft Learn content through Model Context Protocol (MCP).
+<p align="center">
+  AI-powered exam question generator using Microsoft Learn content through Model Context Protocol (MCP).
+</p>
+
+<p align="center">
+  <a href="#overview">Overview</a> •
+  <a href="#quickstart">Quickstart</a> •
+  <a href="#azure-deployment">Azure Deployment</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#documentation">Documentation</a>
+</p>
+
+---
 
 ## Overview
 
@@ -18,32 +30,104 @@ AIExamForge generates high-quality practice exam questions by leveraging Microso
 - **Export Formats**: Export questions as JSON, Markdown, DOCX, or PDF
 - **Study/Exam Modes**: Toggle between study mode (with explanations) and exam mode (without)
 
-## Prerequisites
+---
 
-- .NET 10.0 SDK
-- Azure subscription (for production deployment)
-- MCP-compatible endpoint access
+## Quickstart
 
-## Getting Started
+### Prerequisites
 
-See [quickstart.md](specs/001-generate-questions/quickstart.md) for detailed setup instructions.
+| Tool | Version | Purpose |
+|------|---------|---------|
+| .NET SDK | 10.0+ | Backend runtime |
+| Node.js | 20.x LTS | Frontend tooling |
+| Azure CLI | Latest | Cloud resource management |
+| Git | Latest | Version control |
 
-### Quick Start
+### Local Setup
+
+#### 1. Clone Repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/aiexamforge.git
+git clone https://github.com/swigerb/AIExamForge.git
 cd aiexamforge
+```
 
-# Restore and build
+#### 2. Backend Setup
+
+```bash
 cd backend
 dotnet restore
 dotnet build
 
-# Run the API
+# Create local configuration
+cp src/AIExamForge.Api/appsettings.json src/AIExamForge.Api/appsettings.Development.json
+```
+
+Edit `appsettings.Development.json` with your Azure service endpoints:
+
+```json
+{
+  "AzureOpenAI": {
+    "Endpoint": "https://your-openai.openai.azure.com/",
+    "DeploymentName": "gpt-4-turbo",
+    "ApiKey": "your-api-key"
+  },
+  "BlobStorage": {
+    "ConnectionString": "UseDevelopmentStorage=true"
+  }
+}
+```
+
+#### 3. Run Backend
+
+```bash
 cd src/AIExamForge.Api
 dotnet run
+
+# API available at: https://localhost:5001
+# Swagger UI at: https://localhost:5001/swagger
 ```
+
+#### 4. Frontend Setup
+
+```bash
+cd frontend
+npm install
+echo "VITE_API_BASE_URL=https://localhost:5001/api" > .env.development
+npm run dev
+
+# App available at: http://localhost:5173
+```
+
+### Verify Setup
+
+```bash
+# Backend health check
+curl https://localhost:5001/api/health
+```
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+dotnet test
+
+# Frontend tests
+cd frontend
+npm test
+```
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Database connection failed | Ensure SQL Server LocalDB is installed and running |
+| Azurite connection failed | Run `azurite --silent` in a separate terminal |
+| MCP service unavailable | Verify network connectivity to Microsoft Learn |
+| Azure OpenAI rate limited | Wait for reset or increase TPM quota |
+
+---
 
 ## Azure Deployment
 
@@ -88,28 +172,17 @@ You'll be prompted to:
 ### Common `azd` Commands
 
 ```bash
-# Deploy code changes only (skip infrastructure)
-azd deploy
-
-# View deployed resources
-azd show
-
-# Open the deployed application in browser
-azd monitor --overview
-
-# Tear down all resources
-azd down
-
-# Set environment variables
-azd env set VARIABLE_NAME value
-
-# View current environment
-azd env list
+azd deploy              # Deploy code changes only (skip infrastructure)
+azd show                # View deployed resources
+azd monitor --overview  # Open the deployed application in browser
+azd down                # Tear down all resources
+azd env set VAR value   # Set environment variables
+azd env list            # View current environment
 ```
 
 ### Environment Configuration
 
-After deployment, configure the required secrets in Azure Key Vault:
+After deployment, configure secrets in Azure Key Vault:
 
 ```bash
 # Get the Key Vault name
@@ -121,53 +194,16 @@ az keyvault secret set --vault-name <your-keyvault> --name "AzureOpenAI--ApiKey"
 
 ### Cost Considerations
 
-The default deployment uses:
-- **App Service**: Basic tier (B1)
-- **Static Web App**: Free tier
-- **Azure OpenAI**: Pay-as-you-go pricing
-- **Storage**: Standard LRS
+| Resource | Default Tier |
+|----------|--------------|
+| App Service | Basic (B1) |
+| Static Web App | Free |
+| Azure OpenAI | Pay-as-you-go |
+| Storage | Standard LRS |
 
 For production workloads, consider upgrading the App Service plan and enabling autoscaling.
 
-## MCP Dependency
-
-### What is MCP?
-
-AIExamForge relies on the Model Context Protocol (MCP) to retrieve content from Microsoft Learn documentation. MCP provides structured access to Microsoft's official documentation, ensuring all generated questions are grounded in authoritative sources.
-
-### Content Limitations
-
-**Important**: Questions generated by AIExamForge are limited to content available in Microsoft Learn:
-
-- Questions can only cover topics documented in Microsoft Learn
-- Content not yet published or recently updated may not be available
-- Regional or preview-only features may have limited coverage
-- Deprecated content may still appear if not yet removed from documentation
-
-### MCP Availability
-
-The MCP service is a critical dependency. If MCP is unavailable:
-
-1. **Service Unavailable**: Question generation will fail with a clear error message
-2. **Retry Guidance**: The system will suggest retrying after a brief wait
-3. **Partial Failures**: If some topics fail but others succeed, partial results may be returned
-4. **Timeout Handling**: Long-running queries will timeout with guidance to retry with fewer topics
-
-### Failure Modes and Recovery
-
-| Scenario | User Experience | Recovery Action |
-|----------|-----------------|-----------------|
-| MCP timeout | "Content retrieval timed out. Please retry with fewer topics." | Reduce topic scope, retry |
-| MCP unavailable | "Microsoft Learn content service is temporarily unavailable. Please try again later." | Wait 5-10 minutes, retry |
-| Empty results | "No content found for the selected topics. Verify topic names match Microsoft Learn documentation." | Review topic selection |
-| Rate limited | "Request rate limit reached. Please wait before retrying." | Wait as indicated, retry |
-
-### MCP Performance Considerations
-
-- First queries for a topic may be slower (cache warming)
-- Subsequent queries for the same topic are faster (cached)
-- Large outlines with many topics will take longer
-- Consider breaking large generation requests into smaller batches
+---
 
 ## Architecture
 
@@ -184,33 +220,59 @@ backend/
     ├── AIExamForge.UnitTests/
     ├── AIExamForge.IntegrationTests/
     └── AIExamForge.ContractTests/
+
+frontend/
+└── src/
+    ├── components/    # Reusable UI components
+    ├── pages/         # Route pages (wizard steps)
+    ├── types/         # TypeScript type definitions
+    └── api/           # API client
 ```
+
+### MCP Dependency
+
+AIExamForge relies on the Model Context Protocol (MCP) to retrieve content from Microsoft Learn documentation. MCP provides structured access to Microsoft's official documentation, ensuring all generated questions are grounded in authoritative sources.
+
+**Content Limitations**: Questions are limited to topics documented in Microsoft Learn. Content not yet published, recently updated, or region-specific may have limited coverage.
+
+| Scenario | Recovery Action |
+|----------|-----------------|
+| MCP timeout | Reduce topic scope, retry |
+| MCP unavailable | Wait 5-10 minutes, retry |
+| Empty results | Verify topic names match Microsoft Learn |
+| Rate limited | Wait as indicated, retry |
+
+---
 
 ## Configuration
 
-### Required Configuration
+### Required Settings
 
-| Setting | Description | Example |
-|---------|-------------|---------|
-| `ConnectionStrings:DefaultConnection` | SQL Server connection string | `Server=...;Database=AIExamForge;...` |
-| `AzureAd:*` | Microsoft Entra ID authentication | See appsettings.json |
+| Setting | Description |
+|---------|-------------|
+| `ConnectionStrings:DefaultConnection` | SQL Server connection string |
+| `AzureOpenAI:Endpoint` | Azure OpenAI service endpoint |
+| `AzureOpenAI:ApiKey` | Azure OpenAI API key |
 
-### Optional Configuration
+### Optional Settings
 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `DatabaseSettings:CommandTimeout` | SQL command timeout (seconds) | 30 |
-| `DatabaseSettings:MaxPoolSize` | Connection pool maximum | 100 |
 | `ApplicationInsights:ConnectionString` | App Insights telemetry | (disabled) |
 | `KeyVault:VaultUri` | Azure Key Vault URI | (disabled) |
 
+---
+
 ## Documentation
 
-- [Quickstart Guide](specs/001-generate-questions/quickstart.md) - Getting started
 - [Exam Writing Style Guide](docs/exam-writing-style-guide.md) - Question authoring standards
 - [Style Governance](docs/style-governance.md) - Style precedence rules
 - [Data Model](specs/001-generate-questions/data-model.md) - Entity definitions
 - [API Contracts](specs/001-generate-questions/contracts/) - OpenAPI specification
+- [Item Types](docs/item-types.md) - Supported question types
+
+---
 
 ## License
 
