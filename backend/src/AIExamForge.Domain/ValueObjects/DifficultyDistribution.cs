@@ -6,15 +6,17 @@ namespace AIExamForge.Domain.ValueObjects;
 /// </summary>
 public sealed record DifficultyDistribution
 {
-    public int EasyPercent { get; }
-    public int MediumPercent { get; }
-    public int HardPercent { get; }
+    public int EasyPercent { get; private set; }
+    public int MediumPercent { get; private set; }
+    public int HardPercent { get; private set; }
 
-    private DifficultyDistribution(int easy, int medium, int hard)
+    private DifficultyDistribution() { } // EF Core
+
+    private DifficultyDistribution(int easyPercent, int mediumPercent, int hardPercent)
     {
-        EasyPercent = easy;
-        MediumPercent = medium;
-        HardPercent = hard;
+        EasyPercent = easyPercent;
+        MediumPercent = mediumPercent;
+        HardPercent = hardPercent;
     }
 
     public static DifficultyDistribution Create(int easy, int medium, int hard)

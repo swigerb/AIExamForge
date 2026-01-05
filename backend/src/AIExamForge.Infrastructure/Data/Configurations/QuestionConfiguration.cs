@@ -2,6 +2,7 @@ using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Text.Json;
 
 namespace AIExamForge.Infrastructure.Data.Configurations;
@@ -60,7 +61,11 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
                 .HasColumnName("TagTopics")
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => (IReadOnlyList<string>)(JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()));
+                    v => (IReadOnlyList<string>)(JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()))
+                .Metadata.SetValueComparer(new ValueComparer<IReadOnlyList<string>>(
+                    (a, b) => ReferenceEquals(a, b) || (a != null && b != null && a.SequenceEqual(b)),
+                    v => v == null ? 0 : v.Aggregate(0, (hash, item) => HashCode.Combine(hash, item != null ? StringComparer.Ordinal.GetHashCode(item) : 0)),
+                    v => v == null ? Array.Empty<string>() : v.ToList()));
         });
 
         // Store Scoring as owned type
@@ -76,6 +81,6 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
 
         builder.HasIndex(q => q.QuestionSetId);
         builder.HasIndex(q => q.Difficulty);
-        builder.HasIndex("ItemTypeCode");
+        builder.HasIndex(q => q.ItemType);
     }
 }

@@ -140,7 +140,13 @@ public sealed partial class OutlineParser : IOutlineParser
         if (numberedMatch.Success)
         {
             var numberPart = numberedMatch.Groups[1].Value;
-            var level = numberPart.Count(c => c == '.') + 1;
+            // Determine nesting level by counting numeric segments.
+            // Examples:
+            //   "1." -> 1
+            //   "1.1" -> 2
+            //   "1.1.1" -> 3
+            var trimmed = numberPart.TrimEnd('.');
+            var level = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries).Length;
             var title = numberedMatch.Groups[2].Value;
             return (level, title, null);
         }
@@ -191,7 +197,9 @@ public sealed partial class OutlineParser : IOutlineParser
         var bulletMatch2 = BulletPointRegex().Match(line);
         if (bulletMatch2.Success)
         {
-            return (1, bulletMatch2.Groups[1].Value, null);
+            // Treat unindented bullet points as children of the current section.
+            // Use a high parsed level so they attach to the most recent node.
+            return (10, bulletMatch2.Groups[1].Value, null);
         }
 
         return (1, line, null);
