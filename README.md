@@ -80,15 +80,16 @@ Environment variable alternatives (recommended for local dev):
 - `AzureOpenAI__DeploymentName`
 - `AzureOpenAI__ApiKey`
 
-#### 3. Run Backend
+#### 3. Run API
 
 ```bash
 # From repo root:
 cd backend/src/AIExamForge.Api
 dotnet run
 
-# API available at: https://localhost:5001
-# Swagger UI at: https://localhost:5001/swagger
+# API available at: http://localhost:5180
+# OpenAPI document (Development only): http://localhost:5180/openapi/v1.json
+# HTTPS is available via the "https" launch profile if you want it.
 ```
 
 #### 4. Frontend Setup
@@ -96,7 +97,7 @@ dotnet run
 ```bash
 cd frontend
 npm install
-echo "VITE_API_BASE_URL=https://localhost:5001/api" > .env.development
+echo "VITE_API_BASE_URL=http://localhost:5180/api" > .env.development
 npm run dev
 
 # App available at: http://localhost:5173
@@ -106,7 +107,7 @@ npm run dev
 
 ```bash
 # Backend health check
-curl https://localhost:5001/api/health
+curl http://localhost:5180/health
 ```
 
 ### Running Tests
