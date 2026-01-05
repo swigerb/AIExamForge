@@ -1,0 +1,42 @@
+# Local developer overrides (do not commit)
+/backend/src/AIExamForge.Api/appsettings.Development.json
+/backend/src/AIExamForge.Api/appsettings.*.local.json
+
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Test artifacts / coverage
+TestResults/
+**/*.trx
+**/*.coverage
+**/*.coveragexml
+coverage/
+
+# Visual Studio / Rider / VS Code
+.vs/
+**/*.suo
+**/*.user
+**/*.userosscache
+**/*.sln.docstates
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# NuGet
+**/*.nupkg
+**/*.snupkg
+
+# Node / frontend build output
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.env
+**/.env.*
+
+# Azure Developer CLI
+.azure/
+
+# OS
+.DS_Store
+Thumbs.db

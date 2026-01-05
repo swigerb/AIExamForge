@@ -59,7 +59,9 @@ dotnet restore
 dotnet build
 ```
 
-Edit `backend/src/AIExamForge.Api/appsettings.Development.json` with your Azure service endpoints (or provide them via environment variables / Key Vault):
+Edit `backend/src/AIExamForge.Api/appsettings.json` with your Azure service endpoints (or provide them via environment variables / Key Vault).
+
+Optional: create a local-only override file at `backend/src/AIExamForge.Api/appsettings.Development.json` (this file is gitignored).
 
 ```json
 {
