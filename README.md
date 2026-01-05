@@ -49,18 +49,19 @@ AIExamForge generates high-quality practice exam questions by leveraging Microso
 
 ```bash
 git clone https://github.com/swigerb/AIExamForge.git
-cd aiexamforge
+cd AIExamForge
 ```
 
 #### 2. Backend Setup
 
 ```bash
-cd backend
+# Run restore/build from the repository root (this folder),
+# because that's where the solution file lives.
 dotnet restore
 dotnet build
 ```
 
-Edit `src/AIExamForge.Api/appsettings.Development.json` with your Azure service endpoints (or provide them via environment variables / Key Vault):
+Edit `backend/src/AIExamForge.Api/appsettings.Development.json` with your Azure service endpoints (or provide them via environment variables / Key Vault):
 
 ```json
 {
@@ -84,7 +85,8 @@ Environment variable alternatives (recommended for local dev):
 #### 3. Run Backend
 
 ```bash
-cd src/AIExamForge.Api
+# From repo root:
+cd backend/src/AIExamForge.Api
 dotnet run
 
 # API available at: https://localhost:5001
@@ -113,7 +115,6 @@ curl https://localhost:5001/api/health
 
 ```bash
 # Backend tests
-cd backend
 dotnet test
 
 # Frontend tests
