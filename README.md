@@ -57,10 +57,11 @@ cd aiexamforge
 ```bash
 cd backend
 dotnet restore
+cd ..
 dotnet build
 
 # Create local configuration
-cp src/AIExamForge.Api/appsettings.json src/AIExamForge.Api/appsettings.Development.json
+cd backend/src/AIExamForge.Api
 ```
 
 Edit `appsettings.Development.json` with your Azure service endpoints:
