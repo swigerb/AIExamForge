@@ -3,6 +3,7 @@ using System.Text.Json;
 using AIExamForge.Api.Streaming;
 using AIExamForge.Application.Generation;
 using AIExamForge.Application.Generation.DTOs;
+using AIExamForge.Application.Generation.Interfaces;
 using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.Repositories;
 using AIExamForge.Domain.ValueObjects;
@@ -94,7 +95,7 @@ Creates a new question set, keeping the original for comparison.
     private static async Task<IResult> StartGeneration(
         [FromBody] GenerationRequestDto request,
         [FromServices] IValidator<GenerationRequestDto> validator,
-        [FromServices] QuestionGenerationService generationService,
+        [FromServices] IQuestionGenerationService generationService,
         [FromServices] IGenerationRequestRepository generationRepository,
         HttpContext httpContext,
         ClaimsPrincipal user,
@@ -188,6 +189,10 @@ Creates a new question set, keeping the original for comparison.
             var questionSet = questionSets.FirstOrDefault();
             if (questionSet != null)
             {
+                // Ensure questions are loaded (InMemory/FindAsync does not include navigation properties)
+                var questionSetWithQuestions = await questionSetRepository.GetByIdWithQuestionsAsync(questionSet.Id, cancellationToken);
+                questionSet = questionSetWithQuestions ?? questionSet;
+
                 var questionIndex = 0;
                 response = response with
                 {
@@ -370,7 +375,7 @@ Creates a new question set, keeping the original for comparison.
     /// </summary>
     private static async Task<IResult> RegenerateAll(
         Guid generationId,
-        [FromServices] QuestionGenerationService generationService,
+        [FromServices] IQuestionGenerationService generationService,
         [FromServices] IGenerationRequestRepository generationRepository,
         HttpContext httpContext,
         ClaimsPrincipal user,

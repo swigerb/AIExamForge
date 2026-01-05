@@ -45,6 +45,7 @@ public static class DependencyInjection
         // Generation services
         services.AddScoped<IPromptAssembler, PromptAssembler>();
         services.AddScoped<QuestionGenerationService>();
+        services.AddScoped<IQuestionGenerationService>(sp => sp.GetRequiredService<QuestionGenerationService>());
 
         // Question editing services (T127-T130)
         services.AddScoped<QuestionEditingService>();

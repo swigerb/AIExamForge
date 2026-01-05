@@ -87,7 +87,7 @@ public static class ExportEndpoints
         }
 
         // Get the question set
-        var questionSet = await questionSetRepository.GetByIdAsync(generation.QuestionSetId.Value, cancellationToken);
+        var questionSet = await questionSetRepository.GetByIdWithQuestionsAsync(generation.QuestionSetId.Value, cancellationToken);
         if (questionSet is null || questionSet.TotalQuestions == 0)
         {
             return Results.Problem(

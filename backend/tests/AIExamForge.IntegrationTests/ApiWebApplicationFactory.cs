@@ -1,4 +1,9 @@
 using AIExamForge.Api;
+using AIExamForge.Application.Export;
+using AIExamForge.Application.Export.Interfaces;
+using AIExamForge.Application.Generation.Interfaces;
+using AIExamForge.Application.Validation.Interfaces;
+using AIExamForge.Domain.ValueObjects;
 using AIExamForge.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -32,6 +37,19 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase("AIExamForge_IntegrationTests");
                 options.UseInternalServiceProvider(inMemoryProvider);
             });
+
+            // Make integration tests deterministic by removing dependencies on external services/assets.
+            services.RemoveAll<IQuestionGenerationService>();
+            services.AddSingleton<IQuestionGenerationService, FakeQuestionGenerationService>();
+
+            services.RemoveAll<ISchemaValidator>();
+            services.AddSingleton<ISchemaValidator, FakeSchemaValidator>();
+
+            services.RemoveAll<ILintValidator>();
+            services.AddSingleton<ILintValidator, FakeLintValidator>();
+
+            services.RemoveAll<IExportService>();
+            services.AddSingleton<IExportService, FakeExportService>();
         });
 
         builder.ConfigureAppConfiguration((_, config) =>
@@ -55,4 +73,117 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(overrides);
         });
     }
+}
+
+internal sealed class FakeQuestionGenerationService : IQuestionGenerationService
+{
+    public Task<AIExamForge.Application.Generation.GenerationResult> GenerateAsync(
+        AIExamForge.Application.Generation.DTOs.GenerationRequestDto requestDto,
+        string userId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(AIExamForge.Application.Generation.GenerationResult.Succeeded(
+            requestId: Guid.NewGuid(),
+            questionSetId: Guid.NewGuid(),
+            generated: 0,
+            failed: 0,
+            sourceUrls: []));
+
+    public Task<AIExamForge.Application.Generation.GenerationResult> RegenerateAllAsync(
+        Guid generationRequestId,
+        string userId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(AIExamForge.Application.Generation.GenerationResult.Succeeded(
+            requestId: generationRequestId,
+            questionSetId: Guid.NewGuid(),
+            generated: 0,
+            failed: 0,
+            sourceUrls: []));
+
+    public Task<AIExamForge.Application.Generation.QuestionRegenerationResult> RegenerateQuestionAsync(
+        Guid questionId,
+        string userId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(questionId == Guid.Empty
+            ? AIExamForge.Application.Generation.QuestionRegenerationResult.Failed(questionId, "not found")
+            : new AIExamForge.Application.Generation.QuestionRegenerationResult
+            {
+                OriginalQuestionId = questionId,
+                Success = true,
+                NewQuestionId = null
+            });
+}
+
+internal sealed class FakeSchemaValidator : ISchemaValidator
+{
+    public Task<AIExamForge.Domain.ValueObjects.ValidationResult> ValidateQuestionAsync(
+        string questionJson,
+        string itemTypeCode,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(AIExamForge.Domain.ValueObjects.ValidationResult.Success());
+
+    public Task<AIExamForge.Domain.ValueObjects.ValidationResult> ValidateBaseSchemaAsync(
+        string questionJson,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(AIExamForge.Domain.ValueObjects.ValidationResult.Success());
+
+    public Task<AIExamForge.Domain.ValueObjects.ValidationResult> ValidateItemTypeSchemaAsync(
+        string questionJson,
+        string itemTypeCode,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(AIExamForge.Domain.ValueObjects.ValidationResult.Success());
+}
+
+internal sealed class FakeLintValidator : ILintValidator
+{
+    public IReadOnlyList<AIExamForge.Domain.ValueObjects.LintViolation> Validate(string text, string context = "text")
+        => [];
+
+    public IReadOnlyList<AIExamForge.Domain.ValueObjects.LintViolation> ValidateQuestion(
+        string stem,
+        string? instruction,
+        IEnumerable<string> choices,
+        string? rationale)
+        => [];
+
+    public AIExamForge.Domain.ValueObjects.LintViolation? ValidateRule(string text, AIExamForge.Domain.ValueObjects.LintRule rule)
+        => null;
+}
+
+internal sealed class FakeExportService : IExportService
+{
+    public IReadOnlyList<ExportFormat> GetAvailableFormats() =>
+        [ExportFormat.Json, ExportFormat.Markdown, ExportFormat.Docx, ExportFormat.Pdf];
+
+    public Task<ExportResult> ExportAsync(
+        AIExamForge.Domain.Entities.QuestionSet questionSet,
+        ExportFormat format,
+        RenderMode renderMode,
+        CancellationToken cancellationToken = default)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+        var fileName = $"export{GetExtension(format)}";
+
+        return Task.FromResult(ExportResult.Succeeded(
+            content: bytes,
+            contentType: GetContentType(format),
+            fileName: fileName));
+    }
+
+    private static string GetExtension(ExportFormat format) => format switch
+    {
+        ExportFormat.Json => ".json",
+        ExportFormat.Markdown => ".md",
+        ExportFormat.Docx => ".docx",
+        ExportFormat.Pdf => ".pdf",
+        _ => ".bin"
+    };
+
+    private static string GetContentType(ExportFormat format) => format switch
+    {
+        ExportFormat.Json => "application/json",
+        ExportFormat.Markdown => "text/markdown",
+        ExportFormat.Docx => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ExportFormat.Pdf => "application/pdf",
+        _ => "application/octet-stream"
+    };
 }

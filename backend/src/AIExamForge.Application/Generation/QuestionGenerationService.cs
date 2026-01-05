@@ -22,7 +22,7 @@ namespace AIExamForge.Application.Generation;
 /// 
 /// Per Constitution Principle VI: MCP is the exclusive content source.
 /// </summary>
-public sealed class QuestionGenerationService
+public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationService
 {
     private readonly McpRetrievalService _mcpService;
     private readonly IPromptAssembler _promptAssembler;

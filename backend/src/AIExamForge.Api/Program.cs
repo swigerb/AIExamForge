@@ -98,7 +98,7 @@ app.UseAuthentication();
 
 // Local development convenience: allow calling protected endpoints without Entra ID.
 // This injects a stable dev user identity when requests are otherwise anonymous.
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Auth:InjectLocalDevUser", true))
 {
     app.Use((context, next) =>
     {

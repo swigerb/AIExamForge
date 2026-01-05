@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using AIExamForge.Application.Generation;
 using AIExamForge.Application.Generation.DTOs;
+using AIExamForge.Application.Generation.Interfaces;
 using AIExamForge.Application.Questions;
 using AIExamForge.Application.Questions.DTOs;
 using AIExamForge.Domain.Repositories;
@@ -69,7 +70,7 @@ before persisting.")
     /// </summary>
     private static async Task<IResult> RegenerateQuestion(
         Guid questionId,
-        [FromServices] QuestionGenerationService generationService,
+        [FromServices] IQuestionGenerationService generationService,
         [FromServices] IQuestionSetRepository questionSetRepository,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
