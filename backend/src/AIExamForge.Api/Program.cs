@@ -1,4 +1,5 @@
 using AIExamForge.Api.Endpoints;
+using AIExamForge.Api.Extensions;
 using AIExamForge.Api.Streaming;
 using AIExamForge.Application;
 using AIExamForge.Infrastructure;
@@ -6,6 +7,10 @@ using AIExamForge.Infrastructure.Data;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault as a configuration source when configured.
+// This allows secrets like "AzureOpenAI:ApiKey" to be supplied via Key Vault.
+builder.Configuration.AddAzureKeyVault();
 
 // Add Microsoft Identity (Entra ID) authentication
 builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration, "AzureAd");
@@ -22,10 +27,13 @@ var databaseSettings = builder.Configuration
     .Get<DatabaseSettings>() ?? new DatabaseSettings();
 
 // Add Infrastructure services (DbContext with connection pooling, Repositories, etc.)
-builder.Services.AddInfrastructure(connectionString, databaseSettings);
+builder.Services.AddInfrastructure(builder.Configuration, connectionString, databaseSettings);
 
 // Add Application services (Services, Validators, etc.)
 builder.Services.AddApplication();
+
+// In-memory caching (used by MCP retrieval/caching services)
+builder.Services.AddMemoryCache();
 
 // Add OpenAPI documentation
 builder.Services.AddOpenApi();
@@ -73,6 +81,8 @@ app.MapHealthChecks("/health");
 app.MapApiEndpoints();
 
 app.Run();
+
+public partial class Program;
 
 /// <summary>
 /// Extension methods for mapping API endpoints.

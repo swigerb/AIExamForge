@@ -131,6 +131,11 @@ module api './app/api.bicep' = {
       AZURE_STORAGE_ACCOUNT_NAME: storage.outputs.name
       AZURE_OPENAI_ENDPOINT: openAi.outputs.endpoint
       AZURE_OPENAI_DEPLOYMENT_NAME: openAiModelDeploymentName
+
+      // Preferred .NET configuration keys (double-underscore => ':')
+      KeyVault__VaultUri: keyVault.outputs.endpoint
+      AzureOpenAI__Endpoint: openAi.outputs.endpoint
+      AzureOpenAI__DeploymentName: openAiModelDeploymentName
     }
     keyVaultName: keyVault.outputs.name
   }

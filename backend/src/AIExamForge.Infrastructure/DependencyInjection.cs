@@ -1,10 +1,19 @@
 using AIExamForge.Application.Export.Interfaces;
+using AIExamForge.Application.Generation.Interfaces;
+using AIExamForge.Application.Mcp.Interfaces;
+using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.Repositories;
 using AIExamForge.Infrastructure.Data;
 using AIExamForge.Infrastructure.Export;
+using AIExamForge.Infrastructure.MCP;
+using AIExamForge.Infrastructure.OpenAI;
 using AIExamForge.Infrastructure.Repositories;
+using AIExamForge.Infrastructure.TypeRegistry;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace AIExamForge.Infrastructure;
 
@@ -16,6 +25,50 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
     {
         return services.AddInfrastructure(connectionString, new DatabaseSettings());
+    }
+
+    /// <summary>
+    /// Adds infrastructure services and binds infrastructure configuration (e.g., Azure OpenAI).
+    /// </summary>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string connectionString,
+        DatabaseSettings? settings = null)
+    {
+        services.AddInfrastructure(connectionString, settings);
+
+        // Item type registry (schemas + prompt fragments)
+        services.AddSingleton<ItemTypeRegistry>();
+        services.AddSingleton<IItemTypeRegistry>(sp => sp.GetRequiredService<ItemTypeRegistry>());
+        services.AddHostedService<ItemTypeRegistryInitializerHostedService>();
+
+        // MCP client
+        services.Configure<McpClientOptions>(configuration.GetSection(McpClientOptions.SectionName));
+        services.AddHttpClient<IMcpClient, McpClient>();
+
+        // LLM provider (Azure OpenAI)
+        services.AddSingleton<IOptions<AzureOpenAiOptions>>(_ =>
+        {
+            var options = new AzureOpenAiOptions
+            {
+                Endpoint = configuration["AzureOpenAI:Endpoint"] ?? string.Empty,
+                ApiKey = configuration["AzureOpenAI:ApiKey"] ?? string.Empty,
+                DeploymentName = configuration["AzureOpenAI:DeploymentName"] ?? "gpt-4-turbo",
+                Temperature = float.TryParse(configuration["AzureOpenAI:Temperature"], out var temperature)
+                    ? temperature
+                    : 0.7f,
+                MaxTokens = int.TryParse(configuration["AzureOpenAI:MaxTokens"], out var maxTokens)
+                    ? maxTokens
+                    : 4096
+            };
+
+            return Options.Create(options);
+        });
+
+        services.AddScoped<ILlmClient, AzureOpenAiClient>();
+
+        return services;
     }
 
     /// <summary>

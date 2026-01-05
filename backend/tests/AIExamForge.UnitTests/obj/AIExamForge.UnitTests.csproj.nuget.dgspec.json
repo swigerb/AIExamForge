@@ -1,33 +1,39 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\swige\\aiexamforge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj": {}
+    "C:\\Users\\brswig\\AIExamForge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj": {}
   },
   "projects": {
-    "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj": {
+    "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj",
+        "projectUniqueName": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj",
         "projectName": "AIExamForge.Application",
-        "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj",
-        "packagesPath": "C:\\Users\\swige\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\obj\\",
+        "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj",
+        "packagesPath": "C:\\Users\\brswig\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\swige\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\brswig\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net10.0": {
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
-                "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj"
+              "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
+                "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj"
               }
             }
           }
@@ -363,22 +369,28 @@
         }
       }
     },
-    "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
+    "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj",
+        "projectUniqueName": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj",
         "projectName": "AIExamForge.Domain",
-        "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj",
-        "packagesPath": "C:\\Users\\swige\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\obj\\",
+        "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj",
+        "packagesPath": "C:\\Users\\brswig\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\swige\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\brswig\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -700,33 +712,39 @@
         }
       }
     },
-    "C:\\Users\\swige\\aiexamforge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj": {
+    "C:\\Users\\brswig\\AIExamForge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\swige\\aiexamforge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj",
+        "projectUniqueName": "C:\\Users\\brswig\\AIExamForge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj",
         "projectName": "AIExamForge.UnitTests",
-        "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj",
-        "packagesPath": "C:\\Users\\swige\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\swige\\aiexamforge\\backend\\tests\\AIExamForge.UnitTests\\obj\\",
+        "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\tests\\AIExamForge.UnitTests\\AIExamForge.UnitTests.csproj",
+        "packagesPath": "C:\\Users\\brswig\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\brswig\\AIExamForge\\backend\\tests\\AIExamForge.UnitTests\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\swige\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\brswig\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net10.0": {
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj": {
-                "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj"
+              "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj": {
+                "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application\\AIExamForge.Application.csproj"
               },
-              "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
-                "projectPath": "C:\\Users\\swige\\aiexamforge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj"
+              "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj": {
+                "projectPath": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain\\AIExamForge.Domain.csproj"
               }
             }
           }

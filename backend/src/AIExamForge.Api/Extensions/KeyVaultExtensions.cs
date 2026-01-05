@@ -11,6 +11,13 @@ namespace AIExamForge.Api.Extensions;
 /// </summary>
 public static class KeyVaultExtensions
 {
+    private static string? GetKeyVaultUrlFromEnvironment()
+    {
+        // Prefer explicit AZD/Bicep output, but support common alternatives.
+        return Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_ENDPOINT")
+            ?? Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_URL");
+    }
+
     /// <summary>
     /// Adds Azure Key Vault as a configuration source.
     /// </summary>
@@ -19,7 +26,7 @@ public static class KeyVaultExtensions
         string? keyVaultUrl = null)
     {
         // Get Key Vault URL from environment or parameter
-        keyVaultUrl ??= Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_URL");
+        keyVaultUrl ??= GetKeyVaultUrlFromEnvironment();
 
         if (string.IsNullOrWhiteSpace(keyVaultUrl))
         {
@@ -54,7 +61,8 @@ public static class KeyVaultExtensions
         IConfiguration configuration)
     {
         var keyVaultUrl = configuration["KeyVault:Url"]
-            ?? Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_URL");
+            ?? configuration["KeyVault:VaultUri"]
+            ?? GetKeyVaultUrlFromEnvironment();
 
         if (string.IsNullOrWhiteSpace(keyVaultUrl))
         {

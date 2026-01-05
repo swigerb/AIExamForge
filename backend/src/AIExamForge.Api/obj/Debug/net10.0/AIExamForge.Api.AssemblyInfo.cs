@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AIExamForge.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c783b73c1aaefa3461b3ddedb043611df6b024b3")]
 [assembly: System.Reflection.AssemblyProductAttribute("AIExamForge.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AIExamForge.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

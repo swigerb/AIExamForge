@@ -58,12 +58,9 @@ cd aiexamforge
 cd backend
 dotnet restore
 dotnet build
-
-# Create local configuration
-cp src/AIExamForge.Api/appsettings.json src/AIExamForge.Api/appsettings.Development.json
 ```
 
-Edit `appsettings.Development.json` with your Azure service endpoints:
+Edit `src/AIExamForge.Api/appsettings.Development.json` with your Azure service endpoints (or provide them via environment variables / Key Vault):
 
 ```json
 {
@@ -77,6 +74,12 @@ Edit `appsettings.Development.json` with your Azure service endpoints:
   }
 }
 ```
+
+Environment variable alternatives (recommended for local dev):
+
+- `AzureOpenAI__Endpoint`
+- `AzureOpenAI__DeploymentName`
+- `AzureOpenAI__ApiKey`
 
 #### 3. Run Backend
 

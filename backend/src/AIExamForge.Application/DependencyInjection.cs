@@ -1,5 +1,6 @@
 using AIExamForge.Application.Export;
 using AIExamForge.Application.Export.Interfaces;
+using AIExamForge.Application.Documents;
 using AIExamForge.Application.Generation;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Application.Generation.Interfaces;
@@ -26,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<IOutlineParser, OutlineParser>();
         services.AddScoped<OutlineService>();
 
+        // Document upload services
+        services.AddScoped<FileUploadService>();
+
         // Validation services
         services.AddScoped<ISchemaValidator, SchemaValidator>();
         services.AddScoped<ILintValidator, LintValidator>();
@@ -39,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<CachedMcpRetrievalService>();
 
         // Generation services
+        services.AddScoped<IPromptAssembler, PromptAssembler>();
         services.AddScoped<QuestionGenerationService>();
 
         // Question editing services (T127-T130)

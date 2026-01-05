@@ -1,0 +1,6 @@
+{
+  "AIExamForge.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Api",
+  "AIExamForge.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Application",
+  "AIExamForge.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Domain",
+  "AIExamForge.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\brswig\\AIExamForge\\backend\\src\\AIExamForge.Infrastructure"
+}
