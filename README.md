@@ -20,7 +20,7 @@
 
 ## Overview
 
-AIExamForge generates high-quality practice exam questions by leveraging Microsoft Learn documentation through the Model Context Protocol (MCP). All question content is derived exclusively from official Microsoft documentation, ensuring accuracy and alignment with certification exam objectives.
+AI Exam Forge generates high-quality practice exam questions by leveraging Microsoft Learn documentation through the Model Context Protocol (MCP). All question content is derived exclusively from official Microsoft documentation, ensuring accuracy and alignment with certification exam objectives.
 
 ### Key Features
 
@@ -52,11 +52,9 @@ git clone https://github.com/swigerb/AIExamForge.git
 cd AIExamForge
 ```
 
-#### 2. Backend Setup
+#### 2. Build the solution
 
 ```bash
-# Run restore/build from the repository root (this folder),
-# because that's where the solution file lives.
 dotnet restore
 dotnet build
 ```
