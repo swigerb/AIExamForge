@@ -22,6 +22,10 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
+function getApiOrigin(): string {
+  return API_BASE_URL.endsWith('/api') ? API_BASE_URL.slice(0, -4) : API_BASE_URL;
+}
+
 // ============================================================================
 // Error Classes
 // ============================================================================
@@ -275,5 +279,11 @@ export function triggerDownload(blob: Blob, filename: string): void {
  * Check API health status
  */
 export async function checkHealth(): Promise<HealthResponse> {
-  return get<HealthResponse>('/health');
+  const response = await fetch(`${getApiOrigin()}/health`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+  return handleResponse<HealthResponse>(response);
 }

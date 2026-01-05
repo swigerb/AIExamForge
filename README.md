@@ -105,6 +105,8 @@ npm run dev
 # App available at: http://localhost:5173
 ```
 
+Note: `frontend/.env.development` is gitignored. Use it for your local API URL.
+
 ### Verify Setup
 
 ```bash

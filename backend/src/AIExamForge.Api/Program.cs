@@ -4,6 +4,7 @@ using AIExamForge.Api.Streaming;
 using AIExamForge.Application;
 using AIExamForge.Infrastructure;
 using AIExamForge.Infrastructure.Data;
+using System.Security.Claims;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -74,7 +75,38 @@ else
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
+
+// Local development convenience: allow calling protected endpoints without Entra ID.
+// This injects a stable dev user identity when requests are otherwise anonymous.
+if (app.Environment.IsDevelopment())
+{
+    app.Use((context, next) =>
+    {
+        if (context.User?.Identity?.IsAuthenticated != true)
+        {
+            var identity = new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "local-dev")],
+                authenticationType: "LocalDev");
+            context.User = new ClaimsPrincipal(identity);
+        }
+
+        return next();
+    });
+}
+
 app.UseAuthorization();
+
+// Friendly root endpoint for local debugging / discovery
+app.MapGet("/", (HttpContext ctx) => Results.Ok(new
+{
+    Message = "AIExamForge API is running",
+    Urls = new
+    {
+        Version = $"{ctx.Request.Scheme}://{ctx.Request.Host}/api/version",
+        Health = $"{ctx.Request.Scheme}://{ctx.Request.Host}/health",
+        OpenApi = app.Environment.IsDevelopment() ? $"{ctx.Request.Scheme}://{ctx.Request.Host}/openapi/v1.json" : null
+    }
+})).AllowAnonymous();
 
 // Health check endpoint
 app.MapHealthChecks("/health");
