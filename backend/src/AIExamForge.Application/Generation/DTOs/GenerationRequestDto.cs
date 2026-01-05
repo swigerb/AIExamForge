@@ -1,5 +1,8 @@
 namespace AIExamForge.Application.Generation.DTOs;
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 /// <summary>
 /// DTO for requesting question generation per openapi.yaml GenerationRequest schema.
 /// </summary>
@@ -70,6 +73,7 @@ public sealed record DifficultyDistributionDto
 /// <summary>
 /// Render mode for generated questions.
 /// </summary>
+[JsonConverter(typeof(RenderModeJsonConverter))]
 public enum RenderMode
 {
     /// <summary>
@@ -83,9 +87,42 @@ public enum RenderMode
     Study
 }
 
+public sealed class RenderModeJsonConverter : JsonConverter<RenderMode>
+{
+    public override RenderMode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => Parse(reader.GetString()),
+            JsonTokenType.Number when reader.TryGetInt32(out var n) => (RenderMode)n,
+            _ => throw new JsonException($"Invalid renderMode token type: {reader.TokenType}")
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, RenderMode value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToString());
+
+    private static RenderMode Parse(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            throw new JsonException("renderMode cannot be empty");
+        }
+
+        var normalized = raw.Trim().Replace("_", "-").Replace(" ", "-").ToLowerInvariant();
+        return normalized switch
+        {
+            "exam" or "exam-mode" or "exammode" => RenderMode.Exam,
+            "study" or "study-mode" or "studymode" => RenderMode.Study,
+            _ => throw new JsonException($"Invalid renderMode value: '{raw}'")
+        };
+    }
+}
+
 /// <summary>
 /// Tone profile for generated question text.
 /// </summary>
+[JsonConverter(typeof(ToneProfileJsonConverter))]
 public enum ToneProfile
 {
     /// <summary>
@@ -102,4 +139,37 @@ public enum ToneProfile
     /// Exam-like, neutral and precise.
     /// </summary>
     ExamLike
+}
+
+public sealed class ToneProfileJsonConverter : JsonConverter<ToneProfile>
+{
+    public override ToneProfile Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => Parse(reader.GetString()),
+            JsonTokenType.Number when reader.TryGetInt32(out var n) => (ToneProfile)n,
+            _ => throw new JsonException($"Invalid toneProfile token type: {reader.TokenType}")
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, ToneProfile value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToString());
+
+    private static ToneProfile Parse(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            throw new JsonException("toneProfile cannot be empty");
+        }
+
+        var normalized = raw.Trim().Replace("_", "-").Replace(" ", "-").ToLowerInvariant();
+        return normalized switch
+        {
+            "concise" => ToneProfile.Concise,
+            "professional" => ToneProfile.Professional,
+            "examlike" or "exam-like" or "exam-like-mode" => ToneProfile.ExamLike,
+            _ => throw new JsonException($"Invalid toneProfile value: '{raw}'")
+        };
+    }
 }

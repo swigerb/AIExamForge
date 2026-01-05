@@ -1,6 +1,46 @@
 @AIExamForge.Api_HostAddress = http://localhost:5180
 
+# If you're using a different local port, update AIExamForge.Api_HostAddress.
+# These requests are useful for reproducing/validating request-body JSON binding.
+
 GET {{AIExamForge.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+# --- Question Generation ---
+# Notes:
+# - Replace outlineId/selectedNodeIds with real IDs from your current outline.
+# - renderMode supports common variants (Study/Exam, study-mode/exam-mode, etc.).
+
+@outlineId = 00000000-0000-0000-0000-000000000001
+@nodeId = 00000000-0000-0000-0000-000000000002
+
+POST {{AIExamForge.Api_HostAddress}}/api/generations
+Content-Type: application/json
+Accept: application/json
+
+{
+	"outlineId": "{{outlineId}}",
+	"selectedNodeIds": ["{{nodeId}}"],
+	"questionCount": 5,
+	"questionTypes": ["M1"],
+	"renderMode": "Study",
+	"difficulty": { "easyPercent": 30, "mediumPercent": 50, "hardPercent": 20 },
+	"toneProfile": "exam-like"
+}
+
+###
+
+POST {{AIExamForge.Api_HostAddress}}/api/generations
+Content-Type: application/json
+Accept: application/json
+
+{
+	"outlineId": "{{outlineId}}",
+	"selectedNodeIds": ["{{nodeId}}"],
+	"questionCount": 5,
+	"questionTypes": ["M1"],
+	"renderMode": "Exam Mode"
+}
+

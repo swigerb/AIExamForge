@@ -61,6 +61,34 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
     }
 
     [Fact]
+    public async Task Post_StartGeneration_AllowsStringEnum_RenderMode()
+    {
+        var outlineResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest
+        {
+            Text = "1. Compute\n1.1 Azure App Service",
+            ExamName = "AZ-204"
+        });
+        var outline = await outlineResp.Content.ReadFromJsonAsync<AIExamForge.Application.Parsing.DTOs.OutlineResponse>();
+        Assert.NotNull(outline);
+
+        var nodeId = outline!.Nodes.First().Id;
+
+        var json = $$"""
+        {
+          \"outlineId\": \"{{outline.Id}}\",
+          \"selectedNodeIds\": [\"{{nodeId}}\"],
+          \"questionCount\": 1,
+          \"questionTypes\": [\"M1\"],
+          \"renderMode\": \"Study\"
+        }
+        """;
+
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var resp = await _client.PostAsync("/api/generations", content);
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Get_Generation_SeededCompleted_ReturnsOkWithQuestions()
     {
         var outlineResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest

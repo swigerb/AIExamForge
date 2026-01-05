@@ -2,9 +2,11 @@ using AIExamForge.Api.Endpoints;
 using AIExamForge.Api.Extensions;
 using AIExamForge.Api.Streaming;
 using AIExamForge.Application;
+using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Infrastructure;
 using AIExamForge.Infrastructure.Data;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,6 +40,16 @@ builder.Services.AddMemoryCache();
 
 // Add OpenAPI documentation
 builder.Services.AddOpenApi();
+
+// Minimal API JSON options
+// Frontend sends enums as strings (e.g., "Study"/"Exam"); enable string-enum deserialization.
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    // Prefer tolerant, per-type converters for specific DTO enums.
+    options.SerializerOptions.Converters.Add(new RenderModeJsonConverter());
+    options.SerializerOptions.Converters.Add(new ToneProfileJsonConverter());
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 // Add CORS for frontend
 builder.Services.AddCors(options =>
@@ -80,6 +92,15 @@ builder.Services.AddProblemDetails(options =>
 builder.Services.AddSingleton<GenerationProgressHandler>();
 
 var app = builder.Build();
+
+// Local development convenience: ensure the LocalDB database exists.
+// The repo currently does not ship EF Core migrations, so we use EnsureCreated() in Development.
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AIExamForgeDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
 
 // Configure the HTTP request pipeline
 app.UseExceptionHandler();
@@ -158,5 +179,6 @@ public static class EndpointExtensions
         app.MapGenerationEndpoints();
         app.MapQuestionEndpoints();
         app.MapExportEndpoints();
+        app.MapMcpDiagnosticsEndpoints();
     }
 }
