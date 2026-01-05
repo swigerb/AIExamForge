@@ -56,7 +56,25 @@ builder.Services.AddCors(options =>
 builder.Services.AddHealthChecks();
 
 // Add ProblemDetails for error handling
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        if (!builder.Environment.IsDevelopment())
+        {
+            return;
+        }
+
+        if (context.Exception is not Exception ex)
+        {
+            return;
+        }
+
+        // Put the full exception (including stack trace) into `detail` so the frontend can surface it.
+        // This is Development-only to avoid leaking sensitive details.
+        context.ProblemDetails.Detail = ex.ToString();
+    };
+});
 
 // Add SSE handler for streaming
 builder.Services.AddSingleton<GenerationProgressHandler>();
@@ -64,6 +82,8 @@ builder.Services.AddSingleton<GenerationProgressHandler>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
