@@ -270,17 +270,17 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  U[User] -->|HTTPS| Web[Azure Static Web App (React)]
-  Web -->|REST + SSE| Api[Azure App Service (AIExamForge.Api)]
-  U -->|Sign-in| Entra[Microsoft Entra ID (JWT)]
-  Entra --> Api
-  Api --> Kv[Azure Key Vault]
-  Api --> Aoai[Azure OpenAI]
-  Api --> Mcp[Microsoft Learn MCP]
-  Api --> Storage[Azure Storage (Blobs: documents, exports)]
-  Api --> Db[(SQL Database)]
-  Api --> Ai[Application Insights]
-  Ai --> La[Log Analytics Workspace]
+U[User] -->|HTTPS| Web[Azure Static Web App (React)];
+Web -->|REST + SSE| Api[Azure App Service (AIExamForge.Api)];
+U -->|Sign-in| Entra[Microsoft Entra ID (JWT)];
+Entra --> Api;
+Api --> Kv[Azure Key Vault];
+Api --> Aoai[Azure OpenAI];
+Api --> Mcp[Microsoft Learn MCP];
+Api --> Storage[Azure Storage (Blobs: documents, exports)];
+Api --> Db[(SQL Database)];
+Api --> Ai[Application Insights];
+Ai --> La[Log Analytics Workspace];
 ```
 
 AIExamForge follows Clean Architecture principles:
