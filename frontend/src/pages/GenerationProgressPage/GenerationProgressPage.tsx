@@ -17,6 +17,7 @@ export function GenerationProgressPage() {
     generation,
     setGeneration,
     questionCount,
+    reset,
   } = useWizard();
 
   const [progress, setProgress] = useState(0);
@@ -137,6 +138,7 @@ export function GenerationProgressPage() {
   };
 
   const handleStartOver = () => {
+    reset();
     navigate('/');
   };
 
