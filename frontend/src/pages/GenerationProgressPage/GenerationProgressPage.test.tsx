@@ -168,3 +168,53 @@ test('in dev, shows MCP queries when provided on the generation', async () => {
     'Azure Functions triggers http'
   )
 })
+
+test('shows Azure OpenAI config guidance for Azure OpenAI 404 errors', async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: 'g1',
+    status: 'Failed',
+    progress: 0,
+    errorMessage: 'Azure OpenAI error: HTTP 404 (404) Resource not found',
+    createdAt: new Date().toISOString(),
+  } as any)
+
+  vi.mocked(api.subscribeToGeneration).mockImplementation((_id, _onEvent, onError) => {
+    onError?.(new Error('Connection to generation stream lost'))
+    return () => {}
+  })
+
+  renderWithProviders(<GenerationProgressPage />, {
+    route: '/progress',
+    wizardInitialState: { generationId: 'g1', questionCount: 1 } as any,
+  })
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(/azure openai/i)
+  expect(alert).toHaveTextContent(/404/i)
+  expect(alert).toHaveTextContent(/configuration|deployment|endpoint/i)
+  expect(alert).not.toHaveTextContent(/insufficient content from microsoft learn/i)
+})
+
+test('shows Microsoft Learn content guidance for MCP no-content errors', async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: 'g1',
+    status: 'Failed',
+    progress: 0,
+    errorMessage: 'No content retrieved from MCP.',
+    createdAt: new Date().toISOString(),
+  } as any)
+
+  vi.mocked(api.subscribeToGeneration).mockImplementation((_id, _onEvent, onError) => {
+    onError?.(new Error('Connection to generation stream lost'))
+    return () => {}
+  })
+
+  renderWithProviders(<GenerationProgressPage />, {
+    route: '/progress',
+    wizardInitialState: { generationId: 'g1', questionCount: 1 } as any,
+  })
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(/no content retrieved from mcp/i)
+  expect(alert).toHaveTextContent(/insufficient content from microsoft learn/i)
+})

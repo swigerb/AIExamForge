@@ -2,6 +2,7 @@ using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Text.Json;
 
 namespace AIExamForge.Infrastructure.Data.Configurations;
@@ -36,23 +37,36 @@ public class GenerationRequestConfiguration : IEntityTypeConfiguration<Generatio
         builder.Property(r => r.QuestionsValidated);
         builder.Property(r => r.RetryCount);
 
-        // Store selected node IDs as JSON array
-        builder.Property<string>("SelectedNodeIdsJson")
-            .HasColumnName("SelectedNodeIds")
-            .HasConversion(
-                v => v,
-                v => v);
-
-        // Store item types as JSON array of strings
-        builder.Property<string>("ItemTypesJson")
-            .HasColumnName("ItemTypes")
-            .HasConversion(
-                v => v,
-                v => v);
-
-        // Ignore the backing field collections - they'll be handled manually
+        // Persist/hydrate the collections via backing fields.
+        // We intentionally expose them as read-only lists on the entity, but store them as JSON.
         builder.Ignore(r => r.SelectedNodeIds);
         builder.Ignore(r => r.ItemTypes);
+
+        builder.Property<List<Guid>>("_selectedNodeIds")
+            .HasColumnName("SelectedNodeIds")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new List<Guid>()
+                    : (JsonSerializer.Deserialize<List<Guid>>(v) ?? new List<Guid>()))
+            .Metadata.SetValueComparer(new ValueComparer<List<Guid>>(
+                (a, b) => a != null && b != null && a.SequenceEqual(b),
+                v => v.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                v => v.ToList()));
+
+        builder.Property<List<ItemTypeCode>>("_itemTypes")
+            .HasColumnName("ItemTypes")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v.Select(it => it.Code).ToList(), (JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new List<ItemTypeCode>()
+                    : (JsonSerializer.Deserialize<List<string>>(v) ?? new List<string>())
+                        .Select(ItemTypeCode.Create)
+                        .ToList())
+            .Metadata.SetValueComparer(new ValueComparer<List<ItemTypeCode>>(
+                (a, b) => a != null && b != null && a.Select(x => x.Code).SequenceEqual(b.Select(x => x.Code)),
+                v => v.Select(x => x.Code).Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                v => v.Select(it => ItemTypeCode.Create(it.Code)).ToList()));
 
         // Store difficulty distribution as owned type
         builder.OwnsOne(r => r.DifficultyDistribution, dd =>

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using AIExamForge.Api.Streaming;
+using AIExamForge.Api.Services;
 using AIExamForge.Application.Generation;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Application.Generation.Interfaces;
@@ -98,8 +99,7 @@ Creates a new question set, keeping the original for comparison.
         [FromBody] GenerationRequestDto request,
         [FromServices] IValidator<GenerationRequestDto> validator,
         [FromServices] IUnitOfWork unitOfWork,
-        [FromServices] IServiceScopeFactory scopeFactory,
-        [FromServices] GenerationProgressHandler progressHandler,
+        [FromServices] IGenerationBackgroundQueue backgroundQueue,
         HttpContext httpContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -146,48 +146,10 @@ Creates a new question set, keeping the original for comparison.
         await unitOfWork.GenerationRequests.AddAsync(generationRequest, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Queue background generation with SSE progress callbacks.
-        // IMPORTANT: This must run in its own DI scope so scoped services (DbContext) are not disposed
-        // when the HTTP request ends.
-        var userIdForTask = userId;
-        _ = Task.Run(async () =>
-        {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var generationService = scope.ServiceProvider.GetRequiredService<IQuestionGenerationService>();
-
-            try
-            {
-                await generationService.GenerateStreamingAsync(
-                    request,
-                    userIdForTask,
-                    generationId,
-                    async p =>
-                    {
-                        if (p.Status == GenerationProgressStatus.Failed)
-                        {
-                            await progressHandler.SendErrorAsync(generationId, p.Message);
-                            return;
-                        }
-
-                        if (p.Status == GenerationProgressStatus.Completed)
-                        {
-                            await progressHandler.SendProgressAsync(generationId, 100, p.Message);
-                            await progressHandler.SendCompleteAsync(generationId);
-                            progressHandler.CleanupGeneration(generationId);
-                            return;
-                        }
-
-                        var pct = p.PercentComplete ?? 0;
-                        await progressHandler.SendProgressAsync(generationId, pct, p.Message);
-                    },
-                    CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                await progressHandler.SendErrorAsync(generationId, $"Error: {ex.Message}");
-                progressHandler.CleanupGeneration(generationId);
-            }
-        }, CancellationToken.None);
+        // Queue background generation. A hosted worker will execute this outside the HTTP request scope.
+        await backgroundQueue.EnqueueAsync(
+            new GenerationWorkItem(generationId, userId, request),
+            cancellationToken);
 
         // Build response with stream URL
         var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
@@ -288,10 +250,13 @@ Creates a new question set, keeping the original for comparison.
         Guid generationId,
         [FromServices] GenerationProgressHandler progressHandler,
         [FromServices] IGenerationRequestRepository generationRepository,
+        [FromServices] ILoggerFactory loggerFactory,
         HttpContext httpContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("GenerationSse");
+
         var userId = GetUserId(user);
         if (string.IsNullOrEmpty(userId))
         {
@@ -317,20 +282,33 @@ Creates a new question set, keeping the original for comparison.
         // Register connection
         progressHandler.AddConnection(generationId, writer);
 
+        // If generation already produced an event (e.g., failed quickly before the client subscribed),
+        // replay it so the UI doesn't get stuck waiting forever.
+        var replayed = progressHandler.TryReplayLastEvent(generationId, writer);
+
         try
         {
-            // Send initial status
-            var initialEvent = new GenerationProgressEvent
+            if (!replayed)
             {
-                EventType = "progress",
-                GenerationId = generationId,
-                Progress = CalculateProgress(generationRequest.Status),
-                Message = $"Status: {generationRequest.Status}"
-            };
-            
-            var initialJson = JsonSerializer.Serialize(initialEvent, JsonOptions);
-            await writer.WriteAsync($"event: progress\ndata: {initialJson}\n\n");
-            await writer.FlushAsync();
+                // Send initial status
+                var initialEvent = new GenerationProgressEvent
+                {
+                    EventType = "progress",
+                    GenerationId = generationId,
+                    Progress = CalculateProgress(generationRequest.Status),
+                    Message = $"Status: {generationRequest.Status}"
+                };
+
+                var initialJson = JsonSerializer.Serialize(initialEvent, JsonOptions);
+                await writer.WriteAsync($"event: progress\ndata: {initialJson}\n\n");
+                await writer.FlushAsync();
+
+                logger.LogInformation("SSE initial progress sent for {GenerationId}: {Status}", generationId, generationRequest.Status);
+            }
+            else
+            {
+                logger.LogInformation("SSE replayed last event for {GenerationId}", generationId);
+            }
 
             // If already completed or failed, send that event immediately
             if (generationRequest.Status == GenerationStatus.Completed || 
@@ -359,6 +337,7 @@ Creates a new question set, keeping the original for comparison.
                 }
                 catch
                 {
+                    logger.LogInformation("SSE client disconnected for {GenerationId}", generationId);
                     break; // Connection closed
                 }
             }
@@ -434,8 +413,8 @@ Creates a new question set, keeping the original for comparison.
     /// </summary>
     private static async Task<IResult> RegenerateAll(
         Guid generationId,
-        [FromServices] IQuestionGenerationService generationService,
-        [FromServices] IGenerationRequestRepository generationRepository,
+        [FromServices] IUnitOfWork unitOfWork,
+        [FromServices] IGenerationBackgroundQueue backgroundQueue,
         HttpContext httpContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -447,7 +426,7 @@ Creates a new question set, keeping the original for comparison.
         }
 
         // Verify the generation request exists and belongs to user
-        var existingRequest = await generationRepository.GetByIdAsync(generationId, cancellationToken);
+        var existingRequest = await unitOfWork.GenerationRequests.GetByIdAsync(generationId, cancellationToken);
         if (existingRequest == null || existingRequest.UserId != userId)
         {
             return Results.NotFound();
@@ -463,21 +442,48 @@ Creates a new question set, keeping the original for comparison.
                 title: "Invalid State");
         }
 
-        // Queue background regeneration
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await generationService.RegenerateAllAsync(generationId, userId, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Regeneration failed: {ex.Message}");
-            }
-        }, CancellationToken.None);
-
-        // Return new generation ID
+        // Create a new generation request record so the client can poll/stream immediately.
         var newGenerationId = Guid.NewGuid();
+
+        var newGenerationRequest = GenerationRequest.CreateWithId(
+            newGenerationId,
+            userId,
+            existingRequest.OutlineId,
+            existingRequest.SelectedNodeIds,
+            existingRequest.QuestionCount,
+            existingRequest.ItemTypes,
+            DifficultyDistribution.Create(
+                existingRequest.DifficultyDistribution.EasyPercent,
+                existingRequest.DifficultyDistribution.MediumPercent,
+                existingRequest.DifficultyDistribution.HardPercent),
+            examName: existingRequest.ExamName,
+            toneProfile: existingRequest.ToneProfile);
+
+        await unitOfWork.GenerationRequests.AddAsync(newGenerationRequest, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Build a DTO for the background worker (reuses the same pipeline as normal generation).
+        var requestDto = new GenerationRequestDto
+        {
+            OutlineId = existingRequest.OutlineId,
+            SelectedNodeIds = existingRequest.SelectedNodeIds.ToList(),
+            QuestionCount = existingRequest.QuestionCount,
+            QuestionTypes = existingRequest.ItemTypes.Select(it => it.Code).ToList(),
+            Difficulty = new DifficultyDistributionDto
+            {
+                EasyPercent = existingRequest.DifficultyDistribution.EasyPercent,
+                MediumPercent = existingRequest.DifficultyDistribution.MediumPercent,
+                HardPercent = existingRequest.DifficultyDistribution.HardPercent
+            },
+            ToneProfile = Enum.TryParse<ToneProfile>(existingRequest.ToneProfile, out var tone)
+                ? tone
+                : null
+        };
+
+        await backgroundQueue.EnqueueAsync(
+            new GenerationWorkItem(newGenerationId, userId, requestDto),
+            cancellationToken);
+
         var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
         var response = GenerationStartResponse.FromId(newGenerationId, baseUrl);
 

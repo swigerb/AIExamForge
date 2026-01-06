@@ -98,10 +98,26 @@ builder.Services.AddProblemDetails(options =>
 // Add SSE handler for streaming
 builder.Services.AddSingleton<GenerationProgressHandler>();
 
+// Background queue + worker for generation
+builder.Services.AddSingleton<IGenerationBackgroundQueue, GenerationBackgroundQueue>();
+builder.Services.AddHostedService<GenerationBackgroundWorker>();
+
 // Development diagnostics: capture MCP query strings per generation.
 builder.Services.AddSingleton<IMcpQueryTraceStore, InMemoryMcpQueryTraceStore>();
 
 var app = builder.Build();
+
+// Development diagnostics: log inbound requests immediately so it's obvious when the UI is calling the API.
+// This is especially helpful for long-lived SSE requests which may not complete for a while.
+if (app.Environment.IsDevelopment())
+{
+    var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("RequestTrace");
+    app.Use((context, next) =>
+    {
+        logger.LogInformation("HTTP {Method} {Path}", context.Request.Method, context.Request.Path);
+        return next();
+    });
+}
 
 // Local development convenience: ensure the LocalDB database exists.
 // The repo currently does not ship EF Core migrations, so we use EnsureCreated() in Development.

@@ -30,8 +30,35 @@ public sealed class AzureOpenAiClient : ILlmClient
 
         // Create Azure OpenAI client
         var credential = new AzureKeyCredential(_options.ApiKey);
-        var openAiClient = new AzureOpenAIClient(new Uri(_options.Endpoint), credential);
+        var normalizedEndpoint = NormalizeEndpoint(_options.Endpoint);
+        var openAiClient = new AzureOpenAIClient(new Uri(normalizedEndpoint), credential);
         _chatClient = openAiClient.GetChatClient(_options.DeploymentName);
+    }
+
+    private static string NormalizeEndpoint(string endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return string.Empty;
+        }
+
+        // The Azure SDK expects the *resource base URL* (scheme + host [+ port]), not a full
+        // /openai/deployments/.../chat/completions URL.
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            var builder = new UriBuilder(uri.Scheme, uri.Host)
+            {
+                Port = uri.IsDefaultPort ? -1 : uri.Port,
+                Path = string.Empty,
+                Query = string.Empty,
+                Fragment = string.Empty
+            };
+
+            var baseUri = builder.Uri;
+            return baseUri.AbsoluteUri.EndsWith('/') ? baseUri.AbsoluteUri : baseUri.AbsoluteUri + "/";
+        }
+
+        return endpoint;
     }
 
     /// <inheritdoc />
@@ -85,6 +112,20 @@ public sealed class AzureOpenAiClient : ILlmClient
         catch (ClientResultException ex)
         {
             _logger.LogError(ex, "Azure OpenAI error [{RequestId}]: {Status}", requestId, ex.Status);
+
+            if (ex.Status == 404)
+            {
+                var endpointHost = Uri.TryCreate(_options.Endpoint, UriKind.Absolute, out var uri)
+                    ? uri.Host
+                    : _options.Endpoint;
+
+                return LlmResponse.Failed(
+                    $"Azure OpenAI 404 Resource not found. This almost always means configuration mismatch (wrong AzureOpenAI:Endpoint or AzureOpenAI:DeploymentName). " +
+                    $"Endpoint host: '{endpointHost}'. DeploymentName: '{_options.DeploymentName}'. " +
+                    "Note: Endpoint must be the resource base URL (e.g., https://<resource>.openai.azure.com/), not a /chat/completions URL.",
+                    requestId);
+            }
+
             return LlmResponse.Failed($"Azure OpenAI error: {ex.Message}", requestId);
         }
         catch (Exception ex)
@@ -151,6 +192,20 @@ public sealed class AzureOpenAiClient : ILlmClient
         catch (ClientResultException ex)
         {
             _logger.LogError(ex, "Azure OpenAI streaming error [{RequestId}]: {Status}", requestId, ex.Status);
+
+            if (ex.Status == 404)
+            {
+                var endpointHost = Uri.TryCreate(_options.Endpoint, UriKind.Absolute, out var uri)
+                    ? uri.Host
+                    : _options.Endpoint;
+
+                return LlmResponse.Failed(
+                    $"Azure OpenAI 404 Resource not found. This almost always means configuration mismatch (wrong AzureOpenAI:Endpoint or AzureOpenAI:DeploymentName). " +
+                    $"Endpoint host: '{endpointHost}'. DeploymentName: '{_options.DeploymentName}'. " +
+                    "Note: Endpoint must be the resource base URL (e.g., https://<resource>.openai.azure.com/), not a /chat/completions URL.",
+                    requestId);
+            }
+
             return LlmResponse.Failed($"Azure OpenAI error: {ex.Message}", requestId);
         }
         catch (Exception ex)

@@ -12,6 +12,7 @@ namespace AIExamForge.Api.Streaming;
 public sealed class GenerationProgressHandler
 {
     private readonly ConcurrentDictionary<Guid, List<StreamWriter>> _connections = new();
+    private readonly ConcurrentDictionary<Guid, string> _lastEventByGeneration = new();
     private readonly ILogger<GenerationProgressHandler> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -38,6 +39,30 @@ public sealed class GenerationProgressHandler
 
         _logger.LogDebug("Added SSE connection for generation {GenerationId}. Total connections: {Count}",
             generationId, writers.Count);
+    }
+
+    /// <summary>
+    /// If this generation has already produced an event, replay it for a newly-joined connection.
+    /// This prevents clients from getting stuck if they subscribe after an early failure/completion.
+    /// </summary>
+    public bool TryReplayLastEvent(Guid generationId, StreamWriter writer)
+    {
+        if (!_lastEventByGeneration.TryGetValue(generationId, out var lastEvent))
+        {
+            return false;
+        }
+
+        try
+        {
+            writer.Write(lastEvent);
+            writer.Flush();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to replay last SSE event for generation {GenerationId}", generationId);
+            return false;
+        }
     }
 
     /// <summary>
@@ -104,13 +129,16 @@ public sealed class GenerationProgressHandler
 
     private async Task BroadcastEventAsync(Guid generationId, string eventType, GenerationProgressEvent eventData)
     {
+        var json = JsonSerializer.Serialize(eventData, _jsonOptions);
+        var sseMessage = $"event: {eventType}\ndata: {json}\n\n";
+
+        // Always remember the last event, even if no one is connected yet.
+        _lastEventByGeneration[generationId] = sseMessage;
+
         if (!_connections.TryGetValue(generationId, out var writers))
         {
             return;
         }
-
-        var json = JsonSerializer.Serialize(eventData, _jsonOptions);
-        var sseMessage = $"event: {eventType}\ndata: {json}\n\n";
 
         List<StreamWriter> failedWriters = [];
 
@@ -192,5 +220,7 @@ public sealed class GenerationProgressHandler
 
             _logger.LogDebug("Cleaned up all SSE connections for generation {GenerationId}", generationId);
         }
+
+        _lastEventByGeneration.TryRemove(generationId, out _);
     }
 }

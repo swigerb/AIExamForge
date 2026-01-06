@@ -191,4 +191,34 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
         var resp = await _client.PostAsync($"/api/generations/{Guid.NewGuid()}/regenerate", content: null);
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
+
+    [Fact]
+    public async Task Post_RegenerateAll_Completed_ReturnsAccepted_WithImmediatelyQueryableNewId()
+    {
+        var outlineResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest
+        {
+            Text = "1. Compute\n1.1 Azure App Service",
+            ExamName = "AZ-204"
+        });
+        var outline = await outlineResp.Content.ReadFromJsonAsync<AIExamForge.Application.Parsing.DTOs.OutlineResponse>();
+        Assert.NotNull(outline);
+        var nodeId = outline!.Nodes.First().Id;
+
+        var (generationId, _, _) = await TestDataSeeder.SeedCompletedGenerationWithOneQuestionAsync(_factory, outline.Id, nodeId);
+
+        var resp = await _client.PostAsync($"/api/generations/{generationId}/regenerate", content: null);
+        if (resp.StatusCode != HttpStatusCode.Accepted)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            Assert.Fail($"Expected 202 Accepted but got {(int)resp.StatusCode} {resp.StatusCode}. Body: {body}");
+        }
+
+        var start = await resp.Content.ReadFromJsonAsync<GenerationStartResponse>();
+        Assert.NotNull(start);
+        Assert.NotEqual(Guid.Empty, start!.GenerationId);
+        Assert.NotEqual(generationId, start.GenerationId);
+
+        var get = await _client.GetAsync($"/api/generations/{start.GenerationId}");
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+    }
 }

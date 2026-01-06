@@ -18,7 +18,7 @@ public sealed class GenerationRequest
     /// Selected node IDs from the outline for question generation.
     /// </summary>
     public IReadOnlyList<Guid> SelectedNodeIds => _selectedNodeIds.AsReadOnly();
-    private readonly List<Guid> _selectedNodeIds = [];
+    private List<Guid> _selectedNodeIds = [];
 
     public int QuestionCount { get; private set; }
 
@@ -26,7 +26,7 @@ public sealed class GenerationRequest
     /// Selected item type codes for generation.
     /// </summary>
     public IReadOnlyList<ItemTypeCode> ItemTypes => _itemTypes.AsReadOnly();
-    private readonly List<ItemTypeCode> _itemTypes = [];
+    private List<ItemTypeCode> _itemTypes = [];
 
     public DifficultyDistribution DifficultyDistribution { get; private set; } = null!;
     public string? ToneProfile { get; private set; }

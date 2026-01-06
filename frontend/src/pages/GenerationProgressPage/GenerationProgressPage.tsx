@@ -26,6 +26,9 @@ export function GenerationProgressPage() {
   const [isComplete, setIsComplete] = useState(false);
   const [insufficientContentNotes, setInsufficientContentNotes] = useState<string[]>([]);
 
+  const isAzureOpenAi404Error = !!error && /azure openai/i.test(error) && /\b404\b/i.test(error);
+  const isMcpContentError = !!error && /no content.*mcp|no content found for selected topics|insufficient content/i.test(error);
+
   // Redirect if no generation started
   useEffect(() => {
     if (!generationId) {
@@ -109,6 +112,22 @@ export function GenerationProgressPage() {
     }
   }, [generationId, setGeneration]);
 
+  // Fallback polling: ensures the UI can't get stuck if SSE events are missed/raced.
+  // Disabled in test mode to avoid unexpected mock calls.
+  useEffect(() => {
+    if (!generationId) return;
+    if (import.meta.env.MODE === 'test') return;
+    if (error || isComplete) return;
+
+    const interval = window.setInterval(() => {
+      void fetchFinalResults();
+    }, 3000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [generationId, error, isComplete, fetchFinalResults]);
+
   const handleContinueToResults = () => {
     navigate('/results');
   };
@@ -182,10 +201,22 @@ export function GenerationProgressPage() {
       {error && (
         <Alert variant="error" title="Generation Error">
           {error}
-          <p className={styles.errorHelp}>
-            This may be due to insufficient content from Microsoft Learn for the selected topics.
-            Try selecting different sections or reducing the question count.
-          </p>
+          {isAzureOpenAi404Error ? (
+            <p className={styles.errorHelp}>
+              Azure OpenAI returned 404 Resource not found. This usually means your Azure OpenAI configuration is
+              incorrect (endpoint or deployment name). Verify your Azure OpenAI resource endpoint and that the
+              configured deployment name exists.
+            </p>
+          ) : isMcpContentError ? (
+            <p className={styles.errorHelp}>
+              This may be due to insufficient content from Microsoft Learn for the selected topics. Try selecting
+              different sections or reducing the question count.
+            </p>
+          ) : (
+            <p className={styles.errorHelp}>
+              Try again, or adjust your selected sections and question count.
+            </p>
+          )}
           {import.meta.env.DEV && (
             <div>
               <p className={styles.errorHelp}>Development: MCP queries sent</p>
