@@ -176,7 +176,7 @@ app.MapGet("/", (HttpContext ctx) => Results.Ok(new
 })).AllowAnonymous();
 
 // Health check endpoint
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").WithOpenApi();
 
 // Map API endpoints
 app.MapApiEndpoints();
