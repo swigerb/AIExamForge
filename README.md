@@ -30,6 +30,13 @@ AI Exam Forge generates high-quality practice exam questions by leveraging Micro
 - **Export Formats**: Export questions as JSON, Markdown, DOCX, or PDF
 - **Study/Exam Modes**: Toggle between study mode (with explanations) and exam mode (without)
 
+### Core Objectives
+
+- **Always up-to-date Learn content** without running your own crawler/indexer
+- **Query-time retrieval** (“generate questions for AZ-204 storage triggers” and it pulls relevant pages on demand)
+- **Better grounding + citation paths** as the MCP server returns sources/URLs/sections
+- **Centralized governance**: the backend controls what tools are available, logging, rate limits, prompt injection defenses, etc.
+
 ---
 
 ## Quickstart
@@ -215,6 +222,22 @@ For production workloads, consider upgrading the App Service plan and enabling a
 ---
 
 ## Architecture
+
+### Process Flow
+1.	Frontend calls backend API: “Generate 15 questions for topic X”
+2.	Backend API calls the AI model with tool access enabled
+3.	AI Model calls MCP tools like “search docs” / “get page” with Microsoft Learn MCP server
+4.	Backend receives tool results, model generates questions grounded in that content
+5.	Backend returns JSON to Frontend
+
+- Frontend (Vite/TS/React): purely UI
+-	Backend API (ASP.NET Core):
+    - authenticates user
+    - calls AI LLM
+    -	enables tool calling to Microsoft Learn MCP server
+    -	validates and post-processes output (lint rules, schema validation, dedupe)
+    -	stores results and citations
+    - generates DOCX/MD/PDF/JSON output of questions
 
 ### Application Flow (Mermaid)
 
