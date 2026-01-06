@@ -549,6 +549,13 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         CancellationToken cancellationToken)
     {
         parsed.Id ??= Guid.NewGuid().ToString("N");
+        if (parsed.Id.Length < 8)
+        {
+            // Base schema requires id minLength=8. Some prompts/models emit short ids like "Q001".
+            // Normalize to a stable GUID-like id for validation + persistence.
+            parsed.Id = Guid.NewGuid().ToString("N");
+        }
+
         var result = new QuestionValidationResult(parsed.Id);
 
         var itemTypeCode = parsed.ItemTypeCode ?? "M1";
@@ -567,20 +574,47 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
         var normalizedContent = NormalizeContentElement(parsed.Content);
 
+        // Normalize common LLM shape errors so schema validation reflects intent.
+        // Example bug observed: content = { "content": { "randomizeChoices": true, ... } }
+        // This causes M1 schema failures (randomizeChoices missing at root, nested content not allowed).
+        normalizedContent = NormalizeItemTypeContent(itemTypeCode, normalizedContent);
+
+        // Persist the normalized content so the stored question matches what we validated.
+        parsed.Content = normalizedContent;
+
+        // Schema requires tags + title; the generation pipeline already defaults these
+        // when creating domain entities. Keep schema validation consistent with that behavior
+        // so missing metadata doesn't cause all questions to fail.
+        var title = !string.IsNullOrWhiteSpace(parsed.Title)
+            ? parsed.Title!
+            : $"Question {parsed.Id[..Math.Min(8, parsed.Id.Length)]}";
+
+        var stem = parsed.Stem ?? string.Empty;
+
+        var tagsExam = parsed.Tags?.Exam ?? "General";
+        var tagsObjective = parsed.Tags?.Objective ?? "General Knowledge";
+        var tagsSection = parsed.Tags?.Section ?? "Main";
+
+        var topics = parsed.Tags?.Topics
+            ?.Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var questionForSchema = new
         {
             id = parsed.Id,
             itemTypeCode,
-            title = parsed.Title,
-            stem = parsed.Stem,
+            title,
+            stem,
             instruction = parsed.Instruction,
             difficulty,
             tags = new
             {
-                exam = parsed.Tags?.Exam,
-                objective = parsed.Tags?.Objective,
-                section = parsed.Tags?.Section,
-                topics = parsed.Tags?.Topics.Count > 0 ? parsed.Tags.Topics : null
+                exam = tagsExam,
+                objective = tagsObjective,
+                section = tagsSection,
+                topics = topics is { Count: > 0 } ? topics : null
             },
             scoring = new
             {
@@ -600,6 +634,23 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
         if (!schemaResult.IsValid)
         {
+            try
+            {
+                var preview = schemaResult.SchemaErrors
+                    .Take(5)
+                    .Select(e => $"{e.Path}: {e.Message}")
+                    .ToList();
+                _logger.LogWarning(
+                    "Generated question {QuestionId} failed schema validation for {ItemTypeCode}: {Errors}",
+                    parsed.Id,
+                    itemTypeCode,
+                    string.Join(" | ", preview));
+            }
+            catch
+            {
+                // Best-effort logging only.
+            }
+
             foreach (var error in schemaResult.SchemaErrors)
             {
                 result.AddSchemaError($"{error.Path}: {error.Message}");
@@ -610,7 +661,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         var choices = ExtractChoicesFromContent(normalizedContent);
 
         var lintViolations = _lintValidator.ValidateQuestion(
-            parsed.Stem ?? "",
+            stem,
             parsed.Instruction,
             choices,
             parsed.Rationale);
@@ -621,6 +672,56 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         }
 
         return result;
+    }
+
+    private static JsonElement? NormalizeItemTypeContent(string itemTypeCode, JsonElement? content)
+    {
+        content = NormalizeContentElement(content);
+        if (content is null || content.Value.ValueKind != JsonValueKind.Object)
+        {
+            return content;
+        }
+
+        // Currently we only normalize the shape we observed causing 100% validation failure for M1.
+        if (!string.Equals(itemTypeCode, "M1", StringComparison.OrdinalIgnoreCase))
+        {
+            return content;
+        }
+
+        if (!content.Value.TryGetProperty("content", out var inner) || inner.ValueKind != JsonValueKind.Object)
+        {
+            return content;
+        }
+
+        try
+        {
+            var rootNode = System.Text.Json.Nodes.JsonNode.Parse(content.Value.GetRawText()) as System.Text.Json.Nodes.JsonObject;
+            var innerNode = rootNode?["content"] as System.Text.Json.Nodes.JsonObject;
+            if (rootNode is null || innerNode is null)
+            {
+                return content;
+            }
+
+            // Pull expected M1 fields up from the inner wrapper if missing.
+            foreach (var key in new[] { "choices", "correctChoiceKey", "randomizeChoices" })
+            {
+                if (rootNode[key] is null && innerNode[key] is not null)
+                {
+                    rootNode[key] = innerNode[key];
+                }
+            }
+
+            // Remove the extra wrapper to avoid additionalProperties failures.
+            rootNode.Remove("content");
+
+            var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.Clone();
+        }
+        catch
+        {
+            return content;
+        }
     }
 
     private static string NormalizeDifficultyForSchema(string? difficulty)

@@ -43,7 +43,8 @@ public static class ExportEndpoints
     private static async Task<IResult> ExportQuestionSet(
         Guid generationId,
         [FromQuery(Name = "format")] string formatStr,
-        [FromQuery(Name = "mode")] string modeStr,
+        [FromQuery(Name = "mode")] string? modeStr,
+        [FromQuery(Name = "renderMode")] string? renderModeStr,
         IExportService exportService,
         IGenerationRequestRepository generationRepository,
         IQuestionSetRepository questionSetRepository,
@@ -59,11 +60,13 @@ public static class ExportEndpoints
         }
 
         // Parse and validate render mode
-        if (!TryParseRenderMode(modeStr, out var renderMode))
+        // Support both `mode` (spec) and legacy `renderMode` (older frontend builds).
+        var effectiveMode = modeStr ?? renderModeStr ?? "study";
+        if (!TryParseRenderMode(effectiveMode, out var renderMode))
         {
             return Results.Problem(
                 title: "Invalid render mode",
-                detail: $"Invalid mode '{modeStr}'. Valid modes: exam, study",
+            detail: $"Invalid mode '{effectiveMode}'. Valid modes: exam, study",
                 statusCode: StatusCodes.Status400BadRequest);
         }
 

@@ -43,7 +43,7 @@ test('getExportUrl includes query params', () => {
   const url = getExportUrl('g1', 'pdf', 'Exam')
   expect(url).toContain('/questions/g1/export?')
   expect(url).toContain('format=pdf')
-  expect(url).toContain('renderMode=Exam')
+  expect(url).toContain('mode=Exam')
 })
 
 test('downloadExport returns a blob for successful export', async () => {

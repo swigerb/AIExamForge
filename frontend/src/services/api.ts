@@ -222,7 +222,7 @@ export function getExportUrl(
 ): string {
   const params = new URLSearchParams({
     format,
-    renderMode,
+    mode: renderMode,
   });
   return `${API_BASE_URL}/questions/${generationId}/export?${params}`;
 }

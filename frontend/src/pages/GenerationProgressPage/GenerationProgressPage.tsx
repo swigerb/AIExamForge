@@ -184,10 +184,12 @@ export function GenerationProgressPage() {
       {generatedQuestions.length > 0 && (
         <Card title="Generated Questions Preview" className={styles.previewCard}>
           <ul className={styles.questionList} aria-label="Generated questions">
-            {generatedQuestions.slice(-5).map((q) => (
+            {generatedQuestions.slice(-5).map((q, index) => (
               <li key={q.id} className={styles.questionItem}>
                 <span className={styles.questionBadge}>{q.itemTypeCode}</span>
-                <span className={styles.questionId}>{q.displayId}</span>
+                <span className={styles.questionId}>
+                  Question {Math.max(generatedQuestions.length - 5, 0) + index + 1}/{questionCount}
+                </span>
                 <span className={styles.questionDifficulty} data-difficulty={q.difficulty.toLowerCase()}>
                   {q.difficulty}
                 </span>

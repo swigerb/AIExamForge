@@ -15,7 +15,7 @@ const EXPORT_FORMATS: { value: ExportFormat; label: string; description: string 
 
 export function ExportResultsPage() {
   const navigate = useNavigate();
-  const { generationId, generation, setGeneration, renderMode, outline, reset } = useWizard();
+  const { generationId, generation, setGeneration, renderMode, outline, reset, questionCount } = useWizard();
 
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('pdf');
   const [selectedMode, setSelectedMode] = useState<RenderMode>(renderMode);
@@ -160,10 +160,12 @@ export function ExportResultsPage() {
 
         <Card title="Question Preview" className={styles.previewCard}>
           <div className={styles.questionGrid}>
-            {questions.slice(0, 6).map((q) => (
+            {questions.slice(0, 6).map((q, index) => (
               <div key={q.id} className={styles.questionPreview}>
                 <div className={styles.questionHeader}>
-                  <span className={styles.questionId}>{q.displayId}</span>
+                  <span className={styles.questionId}>
+                    Question {index + 1}/{questionCount || questionSet.totalQuestions}
+                  </span>
                   <span className={styles.typeBadge}>{q.itemTypeCode}</span>
                 </div>
                 <p className={styles.questionSource}>{q.sourceNodeTitle}</p>
