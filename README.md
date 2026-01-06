@@ -270,17 +270,17 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  User[User] -->|HTTPS| Web[Azure Static Web App\nReact Frontend]
-  Web -->|REST + SSE| Api[Azure App Service\nAIExamForge.Api (.NET)]
+  User[User] -->|HTTPS| Web[Azure Static Web App<br/>React Frontend]
+  Web -->|REST + SSE| Api[Azure App Service<br/>AIExamForge.Api (.NET)]
 
-  Entra[Microsoft Entra ID\n(JWT auth)] --> Api
-  User -->|Sign-in| Entra
+  User -->|Sign-in| Entra[Microsoft Entra ID<br/>(JWT auth)]
+  Entra --> Api
 
-  Api --> Kv[Azure Key Vault\nSecrets + config]
-  Api --> Aoai[Azure OpenAI\nQuestion generation]
-  Api --> Mcp[Microsoft Learn MCP\nContent retrieval]
-  Api --> Storage[Azure Storage Account\nBlob containers: documents, exports]
-  Api --> Db[(SQL Database\n(DefaultConnection))]
+  Api --> Kv[Azure Key Vault<br/>Secrets + config]
+  Api --> Aoai[Azure OpenAI<br/>Question generation]
+  Api --> Mcp[Microsoft Learn MCP<br/>Content retrieval]
+  Api --> Storage[Azure Storage Account<br/>Blob containers: documents, exports]
+  Api --> Db[(SQL Database<br/>DefaultConnection)]
 
   Api --> Ai[Application Insights]
   Ai --> La[Log Analytics Workspace]
