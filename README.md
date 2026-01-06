@@ -216,6 +216,76 @@ For production workloads, consider upgrading the App Service plan and enabling a
 
 ## Architecture
 
+### Application Flow (Mermaid)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant Web as Web UI (React)
+  participant API as API (.NET Minimal API)
+  participant DB as SQL Database
+  participant Blob as Blob Storage
+  participant Worker as Background Worker
+  participant MCP as Microsoft Learn MCP
+  participant AOAI as Azure OpenAI
+
+  User->>Web: Upload/paste exam outline
+  alt Paste outline text
+    Web->>API: POST /api/outlines/parse
+    API->>DB: Persist outline + nodes
+    API-->>Web: OutlineResponse
+  else Upload DOCX/PDF
+    Web->>API: POST /api/outlines/upload (multipart)
+    API->>Blob: Store uploaded document
+    API->>DB: Persist extracted outline
+    API-->>Web: FileUploadResponse + OutlineResponse
+  end
+
+  User->>Web: Select outline sections + options
+  Web->>API: POST /api/generations
+  API->>DB: Create GenerationRequest (Queued)
+  API-->>Web: 202 Accepted (generationId + streamUrl)
+
+  Web->>API: GET /api/generations/{id}/stream (SSE)
+  Note over Web,API: SSE events: progress | question | complete | error
+
+  API->>Worker: Dequeue GenerationWorkItem
+  Worker->>DB: Update status: RetrievingContent
+  Worker->>MCP: Retrieve Microsoft Learn content
+  Worker->>DB: Update status: Generating
+  Worker->>AOAI: Generate questions from MCP-grounded prompt
+  Worker->>DB: Update status: Validating
+  Worker->>DB: Persist QuestionSet + Questions
+  Worker-->>API: Publish progress/question events
+  API-->>Web: Stream progress/question/complete
+
+  User->>Web: Download export (json/md/docx/pdf)
+  Web->>API: GET /api/questions/{generationId}/export?format=...&mode=...
+  API->>Blob: (Optional) Store export artifact/record
+  API-->>Web: File download
+```
+
+### Deployment Architecture (Mermaid)
+
+```mermaid
+flowchart LR
+  User[User] -->|HTTPS| Web[Azure Static Web App\nReact Frontend]
+  Web -->|REST + SSE| Api[Azure App Service\nAIExamForge.Api (.NET)]
+
+  Entra[Microsoft Entra ID\n(JWT auth)] --> Api
+  User -->|Sign-in| Entra
+
+  Api --> Kv[Azure Key Vault\nSecrets + config]
+  Api --> Aoai[Azure OpenAI\nQuestion generation]
+  Api --> Mcp[Microsoft Learn MCP\nContent retrieval]
+  Api --> Storage[Azure Storage Account\nBlob containers: documents, exports]
+  Api --> Db[(SQL Database\n(DefaultConnection))]
+
+  Api --> Ai[Application Insights]
+  Ai --> La[Log Analytics Workspace]
+```
+
 AIExamForge follows Clean Architecture principles:
 
 ```
