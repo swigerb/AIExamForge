@@ -5,6 +5,7 @@ using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace AIExamForge.UnitTests.Application.Generation;
@@ -16,11 +17,12 @@ public sealed class PromptAssemblerTests
     {
         var registry = new Mock<IItemTypeRegistry>(MockBehavior.Strict);
         var logger = new Mock<ILogger<PromptAssembler>>();
+        var diagnostics = Options.Create(new DiagnosticsLoggingOptions { Enabled = false });
 
         registry.Setup(r => r.GetPrompt("M1")).Returns("Prompt M1");
         registry.Setup(r => r.GetPrompt("SC")).Throws(new InvalidOperationException("missing prompt"));
 
-        var sut = new PromptAssembler(registry.Object, logger.Object);
+        var sut = new PromptAssembler(registry.Object, diagnostics, logger.Object);
 
         var request = new GenerationRequestDto
         {
@@ -77,10 +79,11 @@ public sealed class PromptAssemblerTests
     {
         var registry = new Mock<IItemTypeRegistry>(MockBehavior.Strict);
         var logger = new Mock<ILogger<PromptAssembler>>();
+        var diagnostics = Options.Create(new DiagnosticsLoggingOptions { Enabled = false });
 
         registry.Setup(r => r.GetPrompt("M1")).Returns("Prompt M1");
 
-        var sut = new PromptAssembler(registry.Object, logger.Object);
+        var sut = new PromptAssembler(registry.Object, diagnostics, logger.Object);
 
         var request = new GenerationRequestDto
         {

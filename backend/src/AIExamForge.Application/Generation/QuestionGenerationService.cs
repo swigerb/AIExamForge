@@ -674,7 +674,24 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         return result;
     }
 
+    internal static JsonElement? NormalizeItemTypeContentForTests(string itemTypeCode, JsonElement content)
+    {
+        return NormalizeItemTypeContentCore(itemTypeCode, content);
+    }
+
     private static JsonElement? NormalizeItemTypeContent(string itemTypeCode, JsonElement? content)
+    {
+        try
+        {
+            return NormalizeItemTypeContentCore(itemTypeCode, content);
+        }
+        catch
+        {
+            return content;
+        }
+    }
+
+    private static JsonElement? NormalizeItemTypeContentCore(string itemTypeCode, JsonElement? content)
     {
         content = NormalizeContentElement(content);
         if (content is null || content.Value.ValueKind != JsonValueKind.Object)
@@ -695,38 +712,54 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         var hasInnerWrapper = content.Value.TryGetProperty("content", out var inner)
             && inner.ValueKind == JsonValueKind.Object;
 
-        try
+        var rootNode = new System.Text.Json.Nodes.JsonObject();
+        foreach (var prop in content.Value.EnumerateObject())
         {
-            var rootNode = System.Text.Json.Nodes.JsonNode.Parse(content.Value.GetRawText()) as System.Text.Json.Nodes.JsonObject;
-            if (rootNode is null)
-            {
-                return content;
-            }
+            rootNode[prop.Name] = System.Text.Json.Nodes.JsonNode.Parse(prop.Value.GetRawText());
+        }
 
-            System.Text.Json.Nodes.JsonObject? innerNode = null;
-            if (hasInnerWrapper)
-            {
-                innerNode = rootNode["content"] as System.Text.Json.Nodes.JsonObject;
-            }
+        System.Text.Json.Nodes.JsonObject? innerNode = null;
+        if (hasInnerWrapper)
+        {
+            innerNode = rootNode["content"] as System.Text.Json.Nodes.JsonObject;
+        }
+
+        static System.Text.Json.Nodes.JsonNode? CloneNode(System.Text.Json.Nodes.JsonNode? node)
+        {
+            return node?.DeepClone();
+        }
 
             if (isM1)
             {
-                if (innerNode is null)
+                // Pull expected M1 fields up from an inner wrapper if present.
+                if (innerNode is not null)
                 {
-                    return content;
-                }
-
-                // Pull expected M1 fields up from the inner wrapper if missing.
-                foreach (var key in new[] { "choices", "correctChoiceKey", "randomizeChoices" })
-                {
-                    if (rootNode[key] is null && innerNode[key] is not null)
+                    foreach (var key in new[] { "choices", "correctChoiceKey", "randomizeChoices" })
                     {
-                        rootNode[key] = innerNode[key];
+                        if (rootNode[key] is null && innerNode[key] is not null)
+                        {
+                            rootNode[key] = CloneNode(innerNode[key]);
+                        }
                     }
                 }
 
-                // Remove the extra wrapper to avoid additionalProperties failures.
+                // Always remove the extra wrapper (even if we couldn't pull fields)
+                // so we don't fail additionalProperties with #/content.*
                 rootNode.Remove("content");
+
+                // Default required M1 fields when missing (best-effort).
+                // randomizeChoices is required by schema and defaults true.
+                rootNode["randomizeChoices"] ??= true;
+
+                // Handle common alternate property names.
+                if (rootNode["correctChoiceKey"] is null)
+                {
+                    rootNode["correctChoiceKey"] =
+                        CloneNode(rootNode["correct_choice_key"])
+                        ?? CloneNode(rootNode["answerKey"]);
+                }
+                rootNode.Remove("correct_choice_key");
+                rootNode.Remove("answerKey");
             }
 
             if (isAS)
@@ -738,7 +771,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                     {
                         if (rootNode[key] is null && innerNode[key] is not null)
                         {
-                            rootNode[key] = innerNode[key];
+                            rootNode[key] = CloneNode(innerNode[key]);
                         }
                     }
 
@@ -746,11 +779,14 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                 }
 
                 // Map common alternative property names.
-                rootNode["screenshotAltText"] ??=
-                    rootNode["screenshot_alt_text"]
-                    ?? rootNode["screenshotAlt"]
-                    ?? rootNode["altText"]
-                    ?? rootNode["screenshotDescription"];
+                if (rootNode["screenshotAltText"] is null)
+                {
+                    rootNode["screenshotAltText"] =
+                        CloneNode(rootNode["screenshot_alt_text"])
+                        ?? CloneNode(rootNode["screenshotAlt"])
+                        ?? CloneNode(rootNode["altText"])
+                        ?? CloneNode(rootNode["screenshotDescription"]);
+                }
 
                 if (rootNode["screenshotAltText"] is null)
                 {
@@ -766,7 +802,10 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                 // Normalize activeAreas array items.
                 if (rootNode["activeAreas"] is null)
                 {
-                    rootNode["activeAreas"] = rootNode["activeArea"] ?? rootNode["hotspots"] ?? rootNode["regions"];
+                    rootNode["activeAreas"] =
+                        CloneNode(rootNode["activeArea"])
+                        ?? CloneNode(rootNode["hotspots"])
+                        ?? CloneNode(rootNode["regions"]);
                 }
 
                 if (rootNode["activeAreas"] is System.Text.Json.Nodes.JsonArray areas)
@@ -851,11 +890,6 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
             using var doc = JsonDocument.Parse(json);
             return doc.RootElement.Clone();
-        }
-        catch
-        {
-            return content;
-        }
     }
 
     private static string NormalizeDifficultyForSchema(string? difficulty)
