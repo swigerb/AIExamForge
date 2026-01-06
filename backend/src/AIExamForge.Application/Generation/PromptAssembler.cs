@@ -4,6 +4,7 @@ using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIExamForge.Application.Generation;
 
@@ -15,6 +16,7 @@ public sealed class PromptAssembler : IPromptAssembler
 {
     private readonly IItemTypeRegistry _itemTypeRegistry;
     private readonly ILogger<PromptAssembler> _logger;
+    private readonly DiagnosticsLoggingOptions _diagnostics;
 
     // Cached prompts loaded at startup
     private readonly string _systemPrompt;
@@ -22,10 +24,12 @@ public sealed class PromptAssembler : IPromptAssembler
 
     public PromptAssembler(
         IItemTypeRegistry itemTypeRegistry,
+        IOptions<DiagnosticsLoggingOptions> diagnostics,
         ILogger<PromptAssembler> logger)
     {
         _itemTypeRegistry = itemTypeRegistry;
         _logger = logger;
+        _diagnostics = diagnostics.Value;
 
         // Load base prompts from files
         _systemPrompt = LoadPromptFile("system-mcp-only.md");
@@ -122,7 +126,52 @@ public sealed class PromptAssembler : IPromptAssembler
         _logger.LogDebug("Assembled prompt [{PromptId}]: {Tokens} estimated tokens",
             payload.PromptId, payload.EstimatedTokenCount);
 
+        if (_diagnostics.Enabled && _diagnostics.LogPromptBodies)
+        {
+            var schemaInstruction = payload.GetJsonSchemaInstruction();
+
+            _logger.LogInformation(
+                "DIAGNOSTICS Prompt [{PromptId}] types={Types} count={Count} tokens~{Tokens} systemLen={SystemLen} userLen={UserLen} schemaLen={SchemaLen}",
+                payload.PromptId,
+                string.Join(",", payload.ItemTypes),
+                payload.QuestionCount,
+                payload.EstimatedTokenCount,
+                payload.SystemPrompt?.Length ?? 0,
+                payload.UserPrompt?.Length ?? 0,
+                schemaInstruction.Length);
+
+            _logger.LogInformation(
+                "DIAGNOSTICS Prompt [{PromptId}] SYSTEM:\n{System}",
+                payload.PromptId,
+                Truncate(payload.SystemPrompt ?? string.Empty, _diagnostics.MaxChars));
+
+            _logger.LogInformation(
+                "DIAGNOSTICS Prompt [{PromptId}] USER:\n{User}",
+                payload.PromptId,
+                Truncate(payload.UserPrompt ?? string.Empty, _diagnostics.MaxChars));
+
+            _logger.LogInformation(
+                "DIAGNOSTICS Prompt [{PromptId}] SCHEMA:\n{Schema}",
+                payload.PromptId,
+                Truncate(schemaInstruction, _diagnostics.MaxChars));
+        }
+
         return Task.FromResult(payload);
+    }
+
+    private static string Truncate(string value, int maxChars)
+    {
+        if (maxChars <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+        {
+            return value;
+        }
+
+        return value[..maxChars] + "\n[TRUNCATED]";
     }
 
     /// <inheritdoc />

@@ -682,37 +682,171 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             return content;
         }
 
-        // Currently we only normalize the shape we observed causing 100% validation failure for M1.
-        if (!string.Equals(itemTypeCode, "M1", StringComparison.OrdinalIgnoreCase))
+        // Normalize the shapes we have observed causing validation failures for specific item types.
+        var isM1 = string.Equals(itemTypeCode, "M1", StringComparison.OrdinalIgnoreCase);
+        var isAS = string.Equals(itemTypeCode, "AS", StringComparison.OrdinalIgnoreCase);
+        if (!isM1 && !isAS)
         {
             return content;
         }
 
-        if (!content.Value.TryGetProperty("content", out var inner) || inner.ValueKind != JsonValueKind.Object)
-        {
-            return content;
-        }
+        // Support an extra wrapper like { "content": { ...real fields... } }
+        // (observed with some models/prompts).
+        var hasInnerWrapper = content.Value.TryGetProperty("content", out var inner)
+            && inner.ValueKind == JsonValueKind.Object;
 
         try
         {
             var rootNode = System.Text.Json.Nodes.JsonNode.Parse(content.Value.GetRawText()) as System.Text.Json.Nodes.JsonObject;
-            var innerNode = rootNode?["content"] as System.Text.Json.Nodes.JsonObject;
-            if (rootNode is null || innerNode is null)
+            if (rootNode is null)
             {
                 return content;
             }
 
-            // Pull expected M1 fields up from the inner wrapper if missing.
-            foreach (var key in new[] { "choices", "correctChoiceKey", "randomizeChoices" })
+            System.Text.Json.Nodes.JsonObject? innerNode = null;
+            if (hasInnerWrapper)
             {
-                if (rootNode[key] is null && innerNode[key] is not null)
-                {
-                    rootNode[key] = innerNode[key];
-                }
+                innerNode = rootNode["content"] as System.Text.Json.Nodes.JsonObject;
             }
 
-            // Remove the extra wrapper to avoid additionalProperties failures.
-            rootNode.Remove("content");
+            if (isM1)
+            {
+                if (innerNode is null)
+                {
+                    return content;
+                }
+
+                // Pull expected M1 fields up from the inner wrapper if missing.
+                foreach (var key in new[] { "choices", "correctChoiceKey", "randomizeChoices" })
+                {
+                    if (rootNode[key] is null && innerNode[key] is not null)
+                    {
+                        rootNode[key] = innerNode[key];
+                    }
+                }
+
+                // Remove the extra wrapper to avoid additionalProperties failures.
+                rootNode.Remove("content");
+            }
+
+            if (isAS)
+            {
+                // Pull common AS fields out of an inner wrapper if present.
+                if (innerNode is not null)
+                {
+                    foreach (var key in new[] { "screenshotAltText", "activeAreas" })
+                    {
+                        if (rootNode[key] is null && innerNode[key] is not null)
+                        {
+                            rootNode[key] = innerNode[key];
+                        }
+                    }
+
+                    rootNode.Remove("content");
+                }
+
+                // Map common alternative property names.
+                rootNode["screenshotAltText"] ??=
+                    rootNode["screenshot_alt_text"]
+                    ?? rootNode["screenshotAlt"]
+                    ?? rootNode["altText"]
+                    ?? rootNode["screenshotDescription"];
+
+                if (rootNode["screenshotAltText"] is null)
+                {
+                    // Best-effort default to satisfy schema required+minLength.
+                    rootNode["screenshotAltText"] = "Screenshot of a UI used in this question.";
+                }
+
+                rootNode.Remove("screenshot_alt_text");
+                rootNode.Remove("screenshotAlt");
+                rootNode.Remove("altText");
+                rootNode.Remove("screenshotDescription");
+
+                // Normalize activeAreas array items.
+                if (rootNode["activeAreas"] is null)
+                {
+                    rootNode["activeAreas"] = rootNode["activeArea"] ?? rootNode["hotspots"] ?? rootNode["regions"];
+                }
+
+                if (rootNode["activeAreas"] is System.Text.Json.Nodes.JsonArray areas)
+                {
+                    for (var i = 0; i < areas.Count; i++)
+                    {
+                        var item = areas[i];
+
+                        if (item is System.Text.Json.Nodes.JsonValue value && value.TryGetValue<string>(out var labelText))
+                        {
+                            areas[i] = new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["id"] = $"area-{i + 1}",
+                                ["label"] = labelText,
+                                ["actionType"] = "click",
+                                ["expectedValue"] = null
+                            };
+                            continue;
+                        }
+
+                        if (item is not System.Text.Json.Nodes.JsonObject obj)
+                        {
+                            continue;
+                        }
+
+                        obj["id"] ??= $"area-{i + 1}";
+                        obj["label"] ??= obj["name"] ?? obj["text"];
+
+                        // Normalize actionType to required enum.
+                        if (obj["actionType"] is System.Text.Json.Nodes.JsonValue at && at.TryGetValue<string>(out var actionType))
+                        {
+                            var normalized = actionType.Trim().ToLowerInvariant();
+                            normalized = normalized switch
+                            {
+                                "click" => "click",
+                                "tap" => "click",
+                                "press" => "click",
+                                "select" => "select",
+                                "choose" => "select",
+                                "dropdown" => "select",
+                                "toggle" => "toggle",
+                                "switch" => "toggle",
+                                "dragdrop" => "dragdrop",
+                                "drag_and_drop" => "dragdrop",
+                                "drag-and-drop" => "dragdrop",
+                                "drag" => "dragdrop",
+                                _ => normalized
+                            };
+
+                            if (normalized is not ("click" or "select" or "toggle" or "dragdrop"))
+                            {
+                                normalized = "click";
+                            }
+
+                            obj["actionType"] = normalized;
+                        }
+                        else
+                        {
+                            obj["actionType"] = "click";
+                        }
+
+                        // Ensure expectedValue exists and is a primitive (or null).
+                        if (obj["expectedValue"] is null)
+                        {
+                            obj["expectedValue"] = null;
+                        }
+                        else if (obj["expectedValue"] is System.Text.Json.Nodes.JsonObject or System.Text.Json.Nodes.JsonArray)
+                        {
+                            obj["expectedValue"] = obj["expectedValue"]!.ToJsonString();
+                        }
+
+                        obj.Remove("name");
+                        obj.Remove("text");
+                    }
+                }
+
+                rootNode.Remove("activeArea");
+                rootNode.Remove("hotspots");
+                rootNode.Remove("regions");
+            }
 
             var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
             using var doc = JsonDocument.Parse(json);

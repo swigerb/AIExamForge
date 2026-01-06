@@ -21,13 +21,31 @@ public sealed class AzureOpenAiClient : ILlmClient
     private ChatClient? _chatClient;
     private readonly ILogger<AzureOpenAiClient> _logger;
     private readonly AzureOpenAiOptions _options;
+    private readonly DiagnosticsLoggingOptions _diagnostics;
 
     public AzureOpenAiClient(
         IOptions<AzureOpenAiOptions> options,
+        IOptions<DiagnosticsLoggingOptions> diagnostics,
         ILogger<AzureOpenAiClient> logger)
     {
         _options = options.Value;
+        _diagnostics = diagnostics.Value;
         _logger = logger;
+    }
+
+    private static string Truncate(string value, int maxChars)
+    {
+        if (maxChars <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+        {
+            return value;
+        }
+
+        return value[..maxChars] + "\n[TRUNCATED]";
     }
 
     private ChatClient GetChatClient()
@@ -111,10 +129,32 @@ public sealed class AzureOpenAiClient : ILlmClient
             _logger.LogInformation("Starting LLM generation [{RequestId}]: {ItemTypes}, {Count} questions",
                 requestId, string.Join(",", prompt.ItemTypes), prompt.QuestionCount);
 
+            var userMessageText = prompt.UserPrompt + "\n\n" + prompt.GetJsonSchemaInstruction();
+            if (_diagnostics.Enabled && _diagnostics.LogLlmRequestBodies)
+            {
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM [{RequestId}] deployment={Deployment} promptId={PromptId} systemLen={SystemLen} userLen={UserLen}",
+                    requestId,
+                    _options.DeploymentName,
+                    prompt.PromptId,
+                    prompt.SystemPrompt?.Length ?? 0,
+                    userMessageText.Length);
+
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM [{RequestId}] SYSTEM:\n{System}",
+                    requestId,
+                    Truncate(prompt.SystemPrompt ?? string.Empty, _diagnostics.MaxChars));
+
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM [{RequestId}] USER+SCHEMA:\n{User}",
+                    requestId,
+                    Truncate(userMessageText, _diagnostics.MaxChars));
+            }
+
             var messages = new List<ChatMessage>
             {
                 new SystemChatMessage(prompt.SystemPrompt),
-                new UserChatMessage(prompt.UserPrompt + "\n\n" + prompt.GetJsonSchemaInstruction())
+                new UserChatMessage(userMessageText)
             };
 
             var completionOptions = new ChatCompletionOptions
@@ -130,6 +170,16 @@ public sealed class AzureOpenAiClient : ILlmClient
             stopwatch.Stop();
 
             var content = chatCompletion.Content.FirstOrDefault()?.Text ?? string.Empty;
+
+            if (_diagnostics.Enabled && _diagnostics.LogLlmResponseBodies)
+            {
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM [{RequestId}] RESPONSE len={Len} finishReason={FinishReason}\n{Response}",
+                    requestId,
+                    content.Length,
+                    chatCompletion.FinishReason.ToString(),
+                    Truncate(content, _diagnostics.MaxChars));
+            }
 
             _logger.LogInformation("LLM generation [{RequestId}] completed in {TimeMs}ms. Tokens: {Input}/{Output}",
                 requestId,
@@ -186,10 +236,27 @@ public sealed class AzureOpenAiClient : ILlmClient
         {
             _logger.LogInformation("Starting streaming LLM generation [{RequestId}]", requestId);
 
+            var userMessageText = prompt.UserPrompt + "\n\n" + prompt.GetJsonSchemaInstruction();
+            if (_diagnostics.Enabled && _diagnostics.LogLlmRequestBodies)
+            {
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM(stream) [{RequestId}] deployment={Deployment} promptId={PromptId} systemLen={SystemLen} userLen={UserLen}",
+                    requestId,
+                    _options.DeploymentName,
+                    prompt.PromptId,
+                    prompt.SystemPrompt?.Length ?? 0,
+                    userMessageText.Length);
+
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM(stream) [{RequestId}] USER+SCHEMA:\n{User}",
+                    requestId,
+                    Truncate(userMessageText, _diagnostics.MaxChars));
+            }
+
             var messages = new List<ChatMessage>
             {
                 new SystemChatMessage(prompt.SystemPrompt),
-                new UserChatMessage(prompt.UserPrompt + "\n\n" + prompt.GetJsonSchemaInstruction())
+                new UserChatMessage(userMessageText)
             };
 
             var completionOptions = new ChatCompletionOptions
@@ -215,11 +282,21 @@ public sealed class AzureOpenAiClient : ILlmClient
 
             stopwatch.Stop();
 
+            var finalContent = contentBuilder.ToString();
+            if (_diagnostics.Enabled && _diagnostics.LogLlmResponseBodies)
+            {
+                _logger.LogInformation(
+                    "DIAGNOSTICS LLM(stream) [{RequestId}] RESPONSE len={Len}\n{Response}",
+                    requestId,
+                    finalContent.Length,
+                    Truncate(finalContent, _diagnostics.MaxChars));
+            }
+
             _logger.LogInformation("Streaming LLM generation [{RequestId}] completed in {TimeMs}ms",
                 requestId, stopwatch.ElapsedMilliseconds);
 
             return LlmResponse.Successful(
-                contentBuilder.ToString(),
+                finalContent,
                 0, // Token counts not available in streaming mode
                 0,
                 stopwatch.ElapsedMilliseconds,

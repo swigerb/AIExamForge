@@ -6,6 +6,7 @@ using AIExamForge.Application;
 using AIExamForge.Application.Mcp;
 using AIExamForge.Application.Mcp.Interfaces;
 using AIExamForge.Application.Generation.DTOs;
+using AIExamForge.Domain.Models;
 using AIExamForge.Infrastructure;
 using AIExamForge.Infrastructure.Data;
 using System.Security.Claims;
@@ -94,6 +95,10 @@ if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("OpenT
 // Add Azure Key Vault as a configuration source when configured.
 // This allows secrets like "AzureOpenAI:ApiKey" to be supplied via Key Vault.
 builder.Configuration.AddAzureKeyVault();
+
+// Development diagnostics logging (prompt/MCP/LLM request/response bodies).
+builder.Services.Configure<DiagnosticsLoggingOptions>(
+    builder.Configuration.GetSection(DiagnosticsLoggingOptions.SectionName));
 
 // Add Microsoft Identity (Entra ID) authentication
 builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration, "AzureAd");

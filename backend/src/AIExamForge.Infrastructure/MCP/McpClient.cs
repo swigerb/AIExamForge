@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AIExamForge.Application.Mcp.Interfaces;
+using AIExamForge.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -22,6 +23,7 @@ public sealed partial class McpClient : IMcpClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<McpClient> _logger;
     private readonly McpClientOptions _options;
+    private readonly DiagnosticsLoggingOptions _diagnostics;
 
     private readonly SemaphoreSlim _sessionLock = new(1, 1);
     private string? _mcpSessionId;
@@ -50,16 +52,33 @@ public sealed partial class McpClient : IMcpClient
     public McpClient(
         HttpClient httpClient,
         IOptions<McpClientOptions> options,
+        IOptions<DiagnosticsLoggingOptions> diagnostics,
         ILogger<McpClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _diagnostics = diagnostics.Value;
         _logger = logger;
 
         // Configure base address and timeout.
         // The Microsoft Learn MCP endpoint is a Streamable HTTP MCP endpoint.
         _httpClient.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/'));
         _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
+    }
+
+    private static string Truncate(string value, int maxChars)
+    {
+        if (maxChars <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+        {
+            return value;
+        }
+
+        return value[..maxChars] + "\n[TRUNCATED]";
     }
 
     /// <inheritdoc />
@@ -829,6 +848,17 @@ public sealed partial class McpClient
     {
         var bodyJson = JsonSerializer.Serialize(request, JsonOptions);
 
+        if (_diagnostics.Enabled && _diagnostics.LogMcpRequestBodies)
+        {
+            _logger.LogInformation(
+                "DIAGNOSTICS MCP [{QueryId}] REQUEST method={Method} id={Id} session={SessionId}\n{Body}",
+                queryId,
+                request.Method,
+                request.Id,
+                _mcpSessionId,
+                Truncate(bodyJson, _diagnostics.MaxChars));
+        }
+
         // Per Streamable HTTP:
         // - POST a single JSON-RPC message
         // - Accept must list application/json and text/event-stream
@@ -865,10 +895,32 @@ public sealed partial class McpClient
 
         if (string.Equals(contentType, "text/event-stream", StringComparison.OrdinalIgnoreCase))
         {
-            return await ReadSseResponseAsync<TResult>(response, request.Id, queryId, cancellationToken);
+            var sseEnvelope = await ReadSseResponseAsync<TResult>(response, request.Id, queryId, cancellationToken);
+            if (_diagnostics.Enabled && _diagnostics.LogMcpResponseBodies)
+            {
+                var sseJson = JsonSerializer.Serialize(new { sseEnvelope.McpSessionId, sseEnvelope.Error, sseEnvelope.Result }, JsonOptions);
+                _logger.LogInformation(
+                    "DIAGNOSTICS MCP [{QueryId}] RESPONSE(SSE) id={Id} session={SessionId}\n{Body}",
+                    queryId,
+                    request.Id,
+                    sseEnvelope.McpSessionId,
+                    Truncate(sseJson, _diagnostics.MaxChars));
+            }
+
+            return sseEnvelope;
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (_diagnostics.Enabled && _diagnostics.LogMcpResponseBodies)
+        {
+            _logger.LogInformation(
+                "DIAGNOSTICS MCP [{QueryId}] RESPONSE id={Id} session={SessionId}\n{Body}",
+                queryId,
+                request.Id,
+                TryGetSessionId(response),
+                Truncate(json, _diagnostics.MaxChars));
+        }
         var envelope = JsonSerializer.Deserialize<JsonRpcResponse<TResult>>(json, JsonOptions);
         if (envelope == null)
         {
