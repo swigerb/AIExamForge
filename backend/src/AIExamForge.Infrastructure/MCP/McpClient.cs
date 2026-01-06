@@ -17,6 +17,8 @@ namespace AIExamForge.Infrastructure.MCP;
 /// </summary>
 public sealed partial class McpClient : IMcpClient
 {
+    private static readonly ActivitySource ActivitySource = new("AIExamForge.Mcp");
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<McpClient> _logger;
     private readonly McpClientOptions _options;
@@ -75,6 +77,9 @@ public sealed partial class McpClient : IMcpClient
         var queryId = Guid.NewGuid().ToString("N")[..8];
         var stopwatch = Stopwatch.StartNew();
 
+        using var activity = ActivitySource.StartActivity("mcp.query", ActivityKind.Internal);
+        activity?.SetTag("mcp.query_id", queryId);
+
         try
         {
             var topicList = topics.ToList();
@@ -84,6 +89,8 @@ public sealed partial class McpClient : IMcpClient
                 queryString += " " + string.Join(" ", keywords);
             }
 
+            activity?.SetTag("mcp.topic.count", topicList.Count);
+            activity?.SetTag("mcp.query", queryString);
             _logger.LogDebug("MCP Query [{QueryId}]: {Query}", queryId, queryString);
 
             await EnsureInitializedAsync(queryId, cancellationToken);
@@ -167,27 +174,53 @@ public sealed partial class McpClient : IMcpClient
                 stopwatch.ElapsedMilliseconds,
                 fetchCount);
 
+            activity?.SetTag("mcp.docs.count", chunks.Count);
+            activity?.SetTag("mcp.docs.fetched.count", fetchCount);
+            activity?.SetTag("mcp.elapsed_ms", stopwatch.ElapsedMilliseconds);
+
             return McpQueryResult.Successful(chunks.AsReadOnly(), queryId, stopwatch.ElapsedMilliseconds);
         }
         catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("MCP Query [{QueryId}] was cancelled", queryId);
+            activity?.SetStatus(ActivityStatusCode.Error, "cancelled");
             throw;
         }
         catch (TaskCanceledException)
         {
             _logger.LogError("MCP Query [{QueryId}] timed out after {Timeout}s",
                 queryId, _options.TimeoutSeconds);
+            activity?.SetStatus(ActivityStatusCode.Error, "timeout");
             return McpQueryResult.Failed("Search took too long. Please try again.", queryId);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "MCP Query [{QueryId}] failed due to HTTP error", queryId);
+            activity?.AddEvent(new ActivityEvent(
+                "exception",
+                default,
+                new ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().FullName,
+                    ["exception.message"] = ex.Message,
+                    ["exception.stacktrace"] = ex.ToString()
+                }));
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return McpQueryResult.Failed($"Failed to connect to MCP server: {ex.Message}", queryId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "MCP Query [{QueryId}] failed unexpectedly", queryId);
+            activity?.AddEvent(new ActivityEvent(
+                "exception",
+                default,
+                new ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().FullName,
+                    ["exception.message"] = ex.Message,
+                    ["exception.stacktrace"] = ex.ToString()
+                }));
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return McpQueryResult.Failed($"Unexpected error: {ex.Message}", queryId);
         }
     }
@@ -653,6 +686,15 @@ public sealed partial class McpClient
         string queryId,
         CancellationToken cancellationToken)
     {
+        using var activity = ActivitySource.StartActivity("mcp.tools.call", ActivityKind.Internal);
+        activity?.SetTag("mcp.query_id", queryId);
+        activity?.SetTag("mcp.tool.name", toolName);
+        activity?.SetTag("mcp.tool.args.count", arguments.Count);
+        activity?.SetTag("mcp.session_id", _mcpSessionId);
+        activity?.SetTag("mcp.protocol_version", _negotiatedProtocolVersion);
+        activity?.SetTag("rpc.system", "jsonrpc");
+        activity?.SetTag("rpc.method", "tools/call");
+
         var request = new JsonRpcRequest<ToolsCallParams>
         {
             Id = Random.Shared.Next(1000, 9999),
@@ -664,28 +706,49 @@ public sealed partial class McpClient
             }
         };
 
-        var response = await SendRequestWithRefreshOnFailureAsync<ToolsCallParams, McpToolCallResult>(
-            request,
-            queryId,
-            cancellationToken);
-
-        if (response.Error != null)
+        try
         {
-            throw new InvalidOperationException($"tools/call failed: {response.Error.Code} {response.Error.Message}");
-        }
+            var response = await SendRequestWithRefreshOnFailureAsync<ToolsCallParams, McpToolCallResult>(
+                request,
+                queryId,
+                cancellationToken);
 
-        if (response.Result == null)
+            activity?.SetTag("rpc.request_id", request.Id);
+
+            if (response.Error != null)
+            {
+                activity?.SetTag("mcp.jsonrpc.error.code", response.Error.Code);
+                activity?.SetTag("mcp.jsonrpc.error.message", response.Error.Message);
+                throw new InvalidOperationException($"tools/call failed: {response.Error.Code} {response.Error.Message}");
+            }
+
+            if (response.Result == null)
+            {
+                throw new InvalidOperationException("tools/call returned no result.");
+            }
+
+            if (response.Result.IsError == true)
+            {
+                var message = ExtractToolText(response.Result) ?? "Tool returned an error.";
+                throw new InvalidOperationException(message);
+            }
+
+            return response.Result;
+        }
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("tools/call returned no result.");
+            activity?.AddEvent(new ActivityEvent(
+                "exception",
+                default,
+                new ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().FullName,
+                    ["exception.message"] = ex.Message,
+                    ["exception.stacktrace"] = ex.ToString()
+                }));
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
         }
-
-        if (response.Result.IsError == true)
-        {
-            var message = ExtractToolText(response.Result) ?? "Tool returned an error.";
-            throw new InvalidOperationException(message);
-        }
-
-        return response.Result;
     }
 
     private async Task<JsonRpcEnvelopeResponse<TResult>> SendRequestWithRefreshOnFailureAsync<TParams, TResult>(

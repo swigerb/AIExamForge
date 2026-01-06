@@ -11,8 +11,85 @@ using AIExamForge.Infrastructure.Data;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Microsoft.Identity.Web;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// OpenTelemetry (Development only)
+// Exports traces/logs/metrics via OTLP so you can view them in the Aspire Dashboard.
+if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("OpenTelemetry:Enabled", true))
+{
+    var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "AIExamForge.Api";
+
+    var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"]
+        ?? Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+        ?? "http://localhost:18889"; // Aspire Dashboard OTLP gRPC default
+
+    var resourceBuilder = ResourceBuilder.CreateDefault()
+        .AddService(serviceName: serviceName, serviceVersion: "1.0.0")
+        .AddAttributes(new Dictionary<string, object>
+        {
+            ["deployment.environment"] = builder.Environment.EnvironmentName
+        });
+
+    builder.Logging.AddOpenTelemetry(options =>
+    {
+        options.SetResourceBuilder(resourceBuilder);
+        options.IncludeFormattedMessage = true;
+        options.IncludeScopes = true;
+        options.ParseStateValues = true;
+
+        options.AddOtlpExporter(o =>
+        {
+            o.Endpoint = new Uri(otlpEndpoint);
+            o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
+        });
+    });
+
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService(serviceName: serviceName, serviceVersion: "1.0.0"))
+        .WithTracing(tracing =>
+        {
+            tracing
+                .SetResourceBuilder(resourceBuilder)
+                .SetSampler(new AlwaysOnSampler())
+                .AddAspNetCoreInstrumentation(o =>
+                {
+                    o.RecordException = true;
+                })
+                .AddHttpClientInstrumentation(o =>
+                {
+                    o.RecordException = true;
+                })
+                .AddEntityFrameworkCoreInstrumentation(o =>
+                {
+                    o.SetDbStatementForText = true;
+                    o.SetDbStatementForStoredProcedure = true;
+                })
+                .AddSource("AIExamForge.Mcp")
+                .AddOtlpExporter(o =>
+                {
+                    o.Endpoint = new Uri(otlpEndpoint);
+                    o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
+                });
+        })
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .SetResourceBuilder(resourceBuilder)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation()
+                .AddOtlpExporter(o =>
+                {
+                    o.Endpoint = new Uri(otlpEndpoint);
+                    o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
+                });
+        });
+}
 
 // Add Azure Key Vault as a configuration source when configured.
 // This allows secrets like "AzureOpenAI:ApiKey" to be supplied via Key Vault.

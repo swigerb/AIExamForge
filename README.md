@@ -11,6 +11,7 @@
 <p align="center">
   <a href="#overview">Overview</a> •
   <a href="#quickstart">Quickstart</a> •
+  <a href="#aspire-dashboard-opentelemetry">Aspire Dashboard</a> •
   <a href="#azure-deployment">Azure Deployment</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#documentation">Documentation</a>
@@ -100,6 +101,63 @@ dotnet run
 # OpenAPI document (Development only): http://localhost:5180/openapi/v1.json
 # HTTPS is available via the "https" launch profile if you want it.
 ```
+
+### Aspire Dashboard (OpenTelemetry)
+
+When running in Development, the API exports OpenTelemetry traces/logs/metrics via OTLP so you can view:
+
+- UI → API requests (ASP.NET Core + HttpClient instrumentation)
+- MCP retrieval spans (custom spans: `mcp.query` and `mcp.tools.call`)
+
+By default, the API exports OTLP over gRPC to `http://localhost:18889`.
+
+#### 1. Start the Aspire Dashboard
+
+Option A: Use the Aspire dashboard command (if you have the Aspire CLI/workload installed):
+
+```bash
+dotnet aspire dashboard
+```
+
+Option B: Use Docker (requires Docker Desktop to be running):
+
+```bash
+docker run --rm -it \
+  -p 18888:18888 \
+  -p 18889:18889 \
+  mcr.microsoft.com/dotnet/aspire-dashboard:8.0
+```
+
+If the image tag changes, use a newer tag (or `:latest`).
+
+#### 2. Run the API (Development)
+
+Start the API using the `http` or `https` launch profile. The repo includes Development defaults in the launch profile:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:18889`
+- `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`
+- `OTEL_TRACES_SAMPLER=always_on`
+
+You can override these with environment variables, or with:
+
+- `OpenTelemetry:Enabled`
+- `OpenTelemetry:OtlpEndpoint`
+
+#### 3. View traces in the dashboard
+
+Open the dashboard UI:
+
+- <http://localhost:18888>
+
+Look for the service:
+
+- `AIExamForge.Api`
+
+Useful spans/tags to filter on:
+
+- Span names: `mcp.query`, `mcp.tools.call`
+- Tag: `mcp.tool.name` (tool being called)
+- Tag: `mcp.query_id` (correlates all tool calls for one query)
 
 #### 4. Frontend Setup
 
