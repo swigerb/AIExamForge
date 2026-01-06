@@ -3,6 +3,7 @@ using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace AIExamForge.Application.Mcp;
 
@@ -62,11 +63,31 @@ public sealed class McpRetrievalService
             return null;
         }
 
+        var combinedContent = result.GetCombinedContent();
+        var sourceUrls = result.GetSourceUrls().ToList();
+        var queryTimeMs = result.QueryTimeMs;
+
+        if (ShouldIncludeCodeSamples(query))
+        {
+            var language = TryInferLanguage(query);
+            var codeSamples = await _mcpClient.SearchCodeSamplesAsync(query, language, cancellationToken);
+
+            if (codeSamples.Success && codeSamples.Samples.Count > 0)
+            {
+                combinedContent = AppendCodeSamples(combinedContent, codeSamples.Samples);
+                sourceUrls.AddRange(codeSamples.Samples
+                    .Select(s => s.Url)
+                    .Where(u => !string.IsNullOrWhiteSpace(u))
+                    .Select(u => u!));
+                queryTimeMs += codeSamples.QueryTimeMs;
+            }
+        }
+
         var content = McpContent.Create(
             query,
-            result.GetCombinedContent(),
-            result.GetSourceUrls(),
-            result.QueryTimeMs,
+            combinedContent,
+            sourceUrls.Distinct().ToList().AsReadOnly(),
+            queryTimeMs,
             node.Id);
 
         _cache.Set(cacheKey, content, CacheDuration);
@@ -137,11 +158,31 @@ public sealed class McpRetrievalService
             return null;
         }
 
+        var combinedContent = result.GetCombinedContent();
+        var sourceUrls = result.GetSourceUrls().ToList();
+        var queryTimeMs = result.QueryTimeMs;
+
+        if (ShouldIncludeCodeSamples(topic))
+        {
+            var language = TryInferLanguage(topic);
+            var codeSamples = await _mcpClient.SearchCodeSamplesAsync(topic, language, cancellationToken);
+
+            if (codeSamples.Success && codeSamples.Samples.Count > 0)
+            {
+                combinedContent = AppendCodeSamples(combinedContent, codeSamples.Samples);
+                sourceUrls.AddRange(codeSamples.Samples
+                    .Select(s => s.Url)
+                    .Where(u => !string.IsNullOrWhiteSpace(u))
+                    .Select(u => u!));
+                queryTimeMs += codeSamples.QueryTimeMs;
+            }
+        }
+
         var content = McpContent.Create(
             topic,
-            result.GetCombinedContent(),
-            result.GetSourceUrls(),
-            result.QueryTimeMs);
+            combinedContent,
+            sourceUrls.Distinct().ToList().AsReadOnly(),
+            queryTimeMs);
 
         _cache.Set(cacheKey, content, CacheDuration);
 
@@ -181,5 +222,119 @@ public sealed class McpRetrievalService
         }
 
         return string.Join(" ", parts);
+    }
+
+    private static bool ShouldIncludeCodeSamples(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        // Apply a lightweight approximation of the microsoft-code-reference skill:
+        // use code sample search when the query is about implementation, APIs, packages, or errors.
+        var q = query.AsSpan();
+
+        return query.Contains("code", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("sample", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("snippet", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("example", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("implement", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("sdk", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("api", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("nuget", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("package", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("class ", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("interface ", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("method ", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("exception", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("stack trace", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("403", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("401", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryInferLanguage(string query)
+    {
+        if (query.Contains("c#", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("dotnet", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains(".net", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains("asp.net", StringComparison.OrdinalIgnoreCase))
+        {
+            return "csharp";
+        }
+
+        if (query.Contains("python", StringComparison.OrdinalIgnoreCase))
+        {
+            return "python";
+        }
+
+        if (query.Contains("typescript", StringComparison.OrdinalIgnoreCase))
+        {
+            return "typescript";
+        }
+
+        if (query.Contains("javascript", StringComparison.OrdinalIgnoreCase) || query.Contains("node", StringComparison.OrdinalIgnoreCase))
+        {
+            return "javascript";
+        }
+
+        if (query.Contains("java ", StringComparison.OrdinalIgnoreCase) || query.EndsWith(" java", StringComparison.OrdinalIgnoreCase))
+        {
+            return "java";
+        }
+
+        return null;
+    }
+
+    private static string AppendCodeSamples(string existingContent, IReadOnlyList<McpCodeSample> samples)
+    {
+        const int maxSamples = 3;
+        const int maxCharsPerSample = 2000;
+
+        var selected = samples
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
+            .Take(maxSamples)
+            .ToList();
+
+        if (selected.Count == 0)
+        {
+            return existingContent;
+        }
+
+        var sb = new StringBuilder();
+        sb.Append(existingContent);
+        sb.Append("\n\n---\n\n");
+        sb.Append("# Official code samples (Microsoft Learn MCP)\n\n");
+
+        foreach (var sample in selected)
+        {
+            var title = string.IsNullOrWhiteSpace(sample.Title) ? "Code sample" : sample.Title;
+            var language = string.IsNullOrWhiteSpace(sample.Language) ? string.Empty : sample.Language;
+            var code = sample.Code ?? string.Empty;
+            if (code.Length > maxCharsPerSample)
+            {
+                code = code[..maxCharsPerSample];
+            }
+
+            sb.Append("## ");
+            sb.Append(title);
+            sb.Append("\n\n");
+
+            sb.Append("```");
+            sb.Append(language);
+            sb.Append("\n");
+            sb.Append(code);
+            sb.Append("\n```\n\n");
+
+            if (!string.IsNullOrWhiteSpace(sample.Url))
+            {
+                sb.Append("Source: ");
+                sb.Append(sample.Url);
+                sb.Append("\n\n");
+            }
+        }
+
+        return sb.ToString();
     }
 }

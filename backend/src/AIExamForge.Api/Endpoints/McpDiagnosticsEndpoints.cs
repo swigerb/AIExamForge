@@ -32,6 +32,14 @@ public static class McpDiagnosticsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces<ProblemDetails>(StatusCodes.Status502BadGateway);
 
+        group.MapGet("/code-samples", CodeSamples)
+            .WithName("mcpCodeSamples")
+            .WithSummary("Run a test MCP code sample search")
+            .WithDescription("Runs microsoft_code_sample_search via MCP and returns a short summary")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces<ProblemDetails>(StatusCodes.Status502BadGateway);
+
         return routes;
     }
 
@@ -80,6 +88,45 @@ public static class McpDiagnosticsEndpoints
             ContentChunkCount = result.ContentChunks.Count,
             SourceUrlCount = result.GetSourceUrls().Count,
             SampleUrls = urls
+        });
+    }
+
+    private static async Task<IResult> CodeSamples(
+        IMcpClient mcpClient,
+        string? query,
+        string? language,
+        CancellationToken cancellationToken)
+    {
+        query = string.IsNullOrWhiteSpace(query)
+            ? "HttpClientFactory typed client example"
+            : query;
+
+        var result = await mcpClient.SearchCodeSamplesAsync(query, language, cancellationToken);
+
+        if (!result.Success)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "MCP code sample search failed",
+                detail: result.ErrorMessage ?? "Unknown error");
+        }
+
+        var sampleUrls = result.Samples
+            .Select(s => s.Url)
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct()
+            .Take(5)
+            .ToArray();
+
+        return Results.Ok(new
+        {
+            Query = query,
+            Language = language,
+            result.Success,
+            result.QueryId,
+            result.QueryTimeMs,
+            SampleCount = result.Samples.Count,
+            SampleUrls = sampleUrls
         });
     }
 }

@@ -33,6 +33,66 @@ public interface IMcpClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if the server is available.</returns>
     Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Searches for official Microsoft/Azure code snippets and examples.
+    /// </summary>
+    /// <param name="query">Search query for Microsoft/Azure code snippets.</param>
+    /// <param name="language">Optional programming language filter (e.g., "csharp", "python").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Code sample search result.</returns>
+    Task<McpCodeSampleSearchResult> SearchCodeSamplesAsync(
+        string query,
+        string? language = null,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Result of a code sample search.
+/// </summary>
+public sealed record McpCodeSampleSearchResult
+{
+    public bool Success { get; init; }
+
+    public string QueryId { get; init; } = string.Empty;
+
+    public long QueryTimeMs { get; init; }
+
+    public string? ErrorMessage { get; init; }
+
+    public IReadOnlyList<McpCodeSample> Samples { get; init; } = [];
+
+    public static McpCodeSampleSearchResult Successful(
+        IReadOnlyList<McpCodeSample> samples,
+        string queryId,
+        long queryTimeMs) => new()
+    {
+        Success = true,
+        Samples = samples,
+        QueryId = queryId,
+        QueryTimeMs = queryTimeMs
+    };
+
+    public static McpCodeSampleSearchResult Failed(string errorMessage, string queryId) => new()
+    {
+        Success = false,
+        ErrorMessage = errorMessage,
+        QueryId = queryId
+    };
+}
+
+/// <summary>
+/// A code sample returned from the Microsoft Learn MCP server.
+/// </summary>
+public sealed record McpCodeSample
+{
+    public string? Title { get; init; }
+
+    public string? Url { get; init; }
+
+    public string? Language { get; init; }
+
+    public string? Code { get; init; }
 }
 
 /// <summary>

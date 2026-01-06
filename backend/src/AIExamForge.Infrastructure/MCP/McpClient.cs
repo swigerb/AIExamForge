@@ -206,6 +206,88 @@ public sealed partial class McpClient : IMcpClient
             return false;
         }
     }
+
+    /// <inheritdoc />
+    public async Task<McpCodeSampleSearchResult> SearchCodeSamplesAsync(
+        string query,
+        string? language = null,
+        CancellationToken cancellationToken = default)
+    {
+        var queryId = Guid.NewGuid().ToString("N")[..8];
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return McpCodeSampleSearchResult.Failed("Query is required.", queryId);
+            }
+
+            await EnsureInitializedAsync(queryId, cancellationToken);
+            await EnsureToolsCachedAsync(queryId, cancellationToken);
+
+            var tool = ResolveCodeSampleSearchTool();
+            if (tool == null)
+            {
+                return McpCodeSampleSearchResult.Failed(
+                    "Microsoft Learn MCP server did not advertise a code sample search tool.",
+                    queryId);
+            }
+
+            var args = new Dictionary<string, object?>
+            {
+                ["query"] = query
+            };
+
+            if (!string.IsNullOrWhiteSpace(language))
+            {
+                args["language"] = language;
+            }
+
+            var payload = await CallToolAsync(tool.Name, args, queryId, cancellationToken);
+
+            if (!TryReadStructuredContent(payload, out CodeSampleSearchResponse? result) || result == null)
+            {
+                return McpCodeSampleSearchResult.Failed(
+                    "Microsoft Learn MCP code sample search returned an unexpected response.",
+                    queryId);
+            }
+
+            var samples = result.Results
+                .Select(r => new McpCodeSample
+                {
+                    Title = r.Title,
+                    Url = r.Url,
+                    Language = r.Language,
+                    Code = r.Code
+                })
+                .ToList()
+                .AsReadOnly();
+
+            return McpCodeSampleSearchResult.Successful(samples, queryId, stopwatch.ElapsedMilliseconds);
+        }
+        catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("MCP code sample search [{QueryId}] was cancelled", queryId);
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogError("MCP code sample search [{QueryId}] timed out after {Timeout}s",
+                queryId, _options.TimeoutSeconds);
+            return McpCodeSampleSearchResult.Failed("Search took too long. Please try again.", queryId);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "MCP code sample search [{QueryId}] failed due to HTTP error", queryId);
+            return McpCodeSampleSearchResult.Failed($"Failed to connect to MCP server: {ex.Message}", queryId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MCP code sample search [{QueryId}] failed unexpectedly", queryId);
+            return McpCodeSampleSearchResult.Failed($"Unexpected error: {ex.Message}", queryId);
+        }
+    }
 }
 
 /// <summary>
@@ -424,37 +506,94 @@ public sealed partial class McpClient
 
     private McpToolDefinition? ResolveDocsSearchTool()
     {
-        // Prefer tools with a string `query` input.
-        return _cachedTools
+        // Prefer the known Microsoft Learn docs tool name when present.
+        var exact = _cachedTools.FirstOrDefault(t =>
+            string.Equals(t.Name, "microsoft_docs_search", StringComparison.OrdinalIgnoreCase));
+
+        // Fall back to a scored heuristic for resiliency, but avoid picking non-doc tools
+        // like microsoft_code_sample_search (which also uses `query`).
+        return exact ?? _cachedTools
             .OrderByDescending(t => ScoreToolForDocsSearch(t))
             .FirstOrDefault(t => ScoreToolForDocsSearch(t) > 0);
     }
 
     private McpToolDefinition? ResolveDocsFetchTool()
     {
-        // Prefer tools with required `url` input.
-        return _cachedTools
+        // Prefer the known Microsoft Learn docs tool name when present.
+        var exact = _cachedTools.FirstOrDefault(t =>
+            string.Equals(t.Name, "microsoft_docs_fetch", StringComparison.OrdinalIgnoreCase));
+
+        // Fall back to a scored heuristic for resiliency.
+        return exact ?? _cachedTools
             .OrderByDescending(t => ScoreToolForDocsFetch(t))
             .FirstOrDefault(t => ScoreToolForDocsFetch(t) > 0);
     }
 
-    private static int ScoreToolForDocsSearch(McpToolDefinition tool)
+    private McpToolDefinition? ResolveCodeSampleSearchTool()
     {
-        var score = 0;
+        // Prefer the known Microsoft Learn code sample tool name when present.
+        var exact = _cachedTools.FirstOrDefault(t =>
+            string.Equals(t.Name, "microsoft_code_sample_search", StringComparison.OrdinalIgnoreCase));
 
-        if (tool.Name.Contains("search", StringComparison.OrdinalIgnoreCase))
+        return exact ?? _cachedTools
+            .OrderByDescending(t => ScoreToolForCodeSampleSearch(t))
+            .FirstOrDefault(t => ScoreToolForCodeSampleSearch(t) > 0);
+    }
+
+    private static int ScoreToolForCodeSampleSearch(McpToolDefinition tool)
+    {
+        if (tool.InputSchema?.Properties?.ContainsKey("query") != true)
         {
-            score += 3;
+            return 0;
         }
 
-        if (tool.Name.Contains("docs", StringComparison.OrdinalIgnoreCase))
+        var isCodeSamples = tool.Name.Contains("code", StringComparison.OrdinalIgnoreCase) ||
+            (tool.Description?.Contains("code", StringComparison.OrdinalIgnoreCase) == true) ||
+            (tool.Description?.Contains("snippet", StringComparison.OrdinalIgnoreCase) == true) ||
+            (tool.Description?.Contains("sample", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (!isCodeSamples)
+        {
+            return 0;
+        }
+
+        var score = 10;
+
+        if (tool.Name.Contains("search", StringComparison.OrdinalIgnoreCase))
         {
             score += 2;
         }
 
-        if (tool.InputSchema?.Properties?.ContainsKey("query") == true)
+        if (tool.InputSchema?.Properties?.ContainsKey("language") == true)
         {
-            score += 10;
+            score += 1;
+        }
+
+        return score;
+    }
+
+    private static int ScoreToolForDocsSearch(McpToolDefinition tool)
+    {
+        if (tool.InputSchema?.Properties?.ContainsKey("query") != true)
+        {
+            return 0;
+        }
+
+        // Require an explicit docs/documentation signal so we don't pick tools like
+        // microsoft_code_sample_search just because they accept `query`.
+        var isDocs = tool.Name.Contains("docs", StringComparison.OrdinalIgnoreCase) ||
+            (tool.Description?.Contains("documentation", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (!isDocs)
+        {
+            return 0;
+        }
+
+        var score = 10;
+
+        if (tool.Name.Contains("search", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 2;
         }
 
         return score;
@@ -462,21 +601,24 @@ public sealed partial class McpClient
 
     private static int ScoreToolForDocsFetch(McpToolDefinition tool)
     {
-        var score = 0;
+        if (tool.InputSchema?.Properties?.ContainsKey("url") != true)
+        {
+            return 0;
+        }
+
+        var isDocs = tool.Name.Contains("docs", StringComparison.OrdinalIgnoreCase) ||
+            (tool.Description?.Contains("documentation", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (!isDocs)
+        {
+            return 0;
+        }
+
+        var score = 10;
 
         if (tool.Name.Contains("fetch", StringComparison.OrdinalIgnoreCase))
         {
-            score += 3;
-        }
-
-        if (tool.Name.Contains("docs", StringComparison.OrdinalIgnoreCase))
-        {
             score += 2;
-        }
-
-        if (tool.InputSchema?.Properties?.ContainsKey("url") == true)
-        {
-            score += 10;
         }
 
         return score;
@@ -1118,5 +1260,26 @@ public sealed partial class McpClient
 
         [JsonPropertyName("contentUrl")]
         public string ContentUrl { get; init; } = string.Empty;
+    }
+
+    private sealed record CodeSampleSearchResponse
+    {
+        [JsonPropertyName("results")]
+        public IReadOnlyList<CodeSampleSearchResult> Results { get; init; } = [];
+    }
+
+    private sealed record CodeSampleSearchResult
+    {
+        [JsonPropertyName("title")]
+        public string? Title { get; init; }
+
+        [JsonPropertyName("url")]
+        public string? Url { get; init; }
+
+        [JsonPropertyName("language")]
+        public string? Language { get; init; }
+
+        [JsonPropertyName("code")]
+        public string? Code { get; init; }
     }
 }
