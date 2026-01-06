@@ -269,18 +269,20 @@ sequenceDiagram
 ### Deployment Architecture (Mermaid)
 
 ```mermaid
-flowchart LR
-U[User] -->|HTTPS| Web[Azure Static Web App (React)];
-Web -->|REST + SSE| Api[Azure App Service (AIExamForge.Api)];
-U -->|Sign-in| Entra[Microsoft Entra ID (JWT)];
-Entra --> Api;
-Api --> Kv[Azure Key Vault];
-Api --> Aoai[Azure OpenAI];
-Api --> Mcp[Microsoft Learn MCP];
-Api --> Storage[Azure Storage (Blobs: documents, exports)];
-Api --> Db[(SQL Database)];
-Api --> Ai[Application Insights];
-Ai --> La[Log Analytics Workspace];
+graph LR
+  U[User] --> Web[Azure Static Web App]
+  Web --> Api[Azure App Service API]
+
+  U --> Entra[Microsoft Entra ID]
+  Entra --> Api
+
+  Api --> Kv[Azure Key Vault]
+  Api --> Aoai[Azure OpenAI]
+  Api --> Mcp[Microsoft Learn MCP]
+  Api --> Storage[Azure Storage Account]
+  Api --> Db[(SQL Database)]
+  Api --> Ai[Application Insights]
+  Ai --> La[Log Analytics Workspace]
 ```
 
 AIExamForge follows Clean Architecture principles:
