@@ -75,11 +75,11 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
 
         var json = $$"""
         {
-          \"outlineId\": \"{{outline.Id}}\",
-          \"selectedNodeIds\": [\"{{nodeId}}\"],
-          \"questionCount\": 1,
-          \"questionTypes\": [\"M1\"],
-          \"renderMode\": \"Study\"
+                    "outlineId": "{{outline.Id}}",
+                    "selectedNodeIds": ["{{nodeId}}"],
+                    "questionCount": 1,
+                    "questionTypes": ["M1"],
+                    "renderMode": "Study"
         }
         """;
 

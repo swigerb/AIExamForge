@@ -2,6 +2,7 @@ using AIExamForge.Api.Endpoints;
 using AIExamForge.Api.Extensions;
 using AIExamForge.Api.Streaming;
 using AIExamForge.Application;
+using AIExamForge.Application.Mcp;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Infrastructure;
 using AIExamForge.Infrastructure.Data;
@@ -34,6 +35,10 @@ builder.Services.AddInfrastructure(builder.Configuration, connectionString, data
 
 // Add Application services (Services, Validators, etc.)
 builder.Services.AddApplication();
+
+// MCP retrieval behavior (e.g., whether to include code samples)
+builder.Services.Configure<McpRetrievalOptions>(
+    builder.Configuration.GetSection(McpRetrievalOptions.SectionName));
 
 // In-memory caching (used by MCP retrieval/caching services)
 builder.Services.AddMemoryCache();

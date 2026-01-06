@@ -3,6 +3,7 @@ using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Text;
 
 namespace AIExamForge.Application.Mcp;
@@ -17,6 +18,7 @@ public sealed class McpRetrievalService
     private readonly IMcpClient _mcpClient;
     private readonly IMemoryCache _cache;
     private readonly ILogger<McpRetrievalService> _logger;
+    private readonly McpRetrievalOptions _options;
 
     // Cache content for 30 minutes (content doesn't change frequently)
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
@@ -24,10 +26,12 @@ public sealed class McpRetrievalService
     public McpRetrievalService(
         IMcpClient mcpClient,
         IMemoryCache cache,
+        IOptions<McpRetrievalOptions> options,
         ILogger<McpRetrievalService> logger)
     {
         _mcpClient = mcpClient;
         _cache = cache;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -67,14 +71,18 @@ public sealed class McpRetrievalService
         var sourceUrls = result.GetSourceUrls().ToList();
         var queryTimeMs = result.QueryTimeMs;
 
-        if (ShouldIncludeCodeSamples(query))
+        if (ShouldIncludeCodeSamples(query, _options.CodeSampleMode))
         {
             var language = TryInferLanguage(query);
             var codeSamples = await _mcpClient.SearchCodeSamplesAsync(query, language, cancellationToken);
 
             if (codeSamples.Success && codeSamples.Samples.Count > 0)
             {
-                combinedContent = AppendCodeSamples(combinedContent, codeSamples.Samples);
+                combinedContent = AppendCodeSamples(
+                    combinedContent,
+                    codeSamples.Samples,
+                    _options.MaxCodeSamples,
+                    _options.MaxCharsPerCodeSample);
                 sourceUrls.AddRange(codeSamples.Samples
                     .Select(s => s.Url)
                     .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -162,14 +170,18 @@ public sealed class McpRetrievalService
         var sourceUrls = result.GetSourceUrls().ToList();
         var queryTimeMs = result.QueryTimeMs;
 
-        if (ShouldIncludeCodeSamples(topic))
+        if (ShouldIncludeCodeSamples(topic, _options.CodeSampleMode))
         {
             var language = TryInferLanguage(topic);
             var codeSamples = await _mcpClient.SearchCodeSamplesAsync(topic, language, cancellationToken);
 
             if (codeSamples.Success && codeSamples.Samples.Count > 0)
             {
-                combinedContent = AppendCodeSamples(combinedContent, codeSamples.Samples);
+                combinedContent = AppendCodeSamples(
+                    combinedContent,
+                    codeSamples.Samples,
+                    _options.MaxCodeSamples,
+                    _options.MaxCharsPerCodeSample);
                 sourceUrls.AddRange(codeSamples.Samples
                     .Select(s => s.Url)
                     .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -224,17 +236,25 @@ public sealed class McpRetrievalService
         return string.Join(" ", parts);
     }
 
-    private static bool ShouldIncludeCodeSamples(string query)
+    private static bool ShouldIncludeCodeSamples(string query, string mode)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
             return false;
         }
 
+        if (string.Equals(mode, "Never", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(mode, "Always", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         // Apply a lightweight approximation of the microsoft-code-reference skill:
         // use code sample search when the query is about implementation, APIs, packages, or errors.
-        var q = query.AsSpan();
-
         return query.Contains("code", StringComparison.OrdinalIgnoreCase) ||
             query.Contains("sample", StringComparison.OrdinalIgnoreCase) ||
             query.Contains("snippet", StringComparison.OrdinalIgnoreCase) ||
@@ -287,10 +307,16 @@ public sealed class McpRetrievalService
         return null;
     }
 
-    private static string AppendCodeSamples(string existingContent, IReadOnlyList<McpCodeSample> samples)
+    private static string AppendCodeSamples(
+        string existingContent,
+        IReadOnlyList<McpCodeSample> samples,
+        int maxSamples,
+        int maxCharsPerSample)
     {
-        const int maxSamples = 3;
-        const int maxCharsPerSample = 2000;
+        if (maxSamples <= 0 || maxCharsPerSample <= 0)
+        {
+            return existingContent;
+        }
 
         var selected = samples
             .Where(s => !string.IsNullOrWhiteSpace(s.Code))
