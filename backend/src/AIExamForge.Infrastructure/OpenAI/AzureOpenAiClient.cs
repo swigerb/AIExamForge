@@ -17,7 +17,8 @@ namespace AIExamForge.Infrastructure.OpenAI;
 /// </summary>
 public sealed class AzureOpenAiClient : ILlmClient
 {
-    private readonly ChatClient _chatClient;
+    private readonly object _clientLock = new();
+    private ChatClient? _chatClient;
     private readonly ILogger<AzureOpenAiClient> _logger;
     private readonly AzureOpenAiOptions _options;
 
@@ -27,12 +28,48 @@ public sealed class AzureOpenAiClient : ILlmClient
     {
         _options = options.Value;
         _logger = logger;
+    }
 
-        // Create Azure OpenAI client
-        var credential = new AzureKeyCredential(_options.ApiKey);
-        var normalizedEndpoint = NormalizeEndpoint(_options.Endpoint);
-        var openAiClient = new AzureOpenAIClient(new Uri(normalizedEndpoint), credential);
-        _chatClient = openAiClient.GetChatClient(_options.DeploymentName);
+    private ChatClient GetChatClient()
+    {
+        if (_chatClient is not null)
+        {
+            return _chatClient;
+        }
+
+        lock (_clientLock)
+        {
+            if (_chatClient is not null)
+            {
+                return _chatClient;
+            }
+
+            if (string.IsNullOrWhiteSpace(_options.ApiKey))
+            {
+                throw new InvalidOperationException(
+                    "Azure OpenAI API key is not configured. Set AzureOpenAI:ApiKey (for example via environment variable AZUREOPENAI__APIKEY, user-secrets, or Key Vault).");
+            }
+
+            if (string.IsNullOrWhiteSpace(_options.Endpoint))
+            {
+                throw new InvalidOperationException(
+                    "Azure OpenAI endpoint is not configured. Set AzureOpenAI:Endpoint to your resource base URL (e.g., https://<resource>.openai.azure.com/)."
+                );
+            }
+
+            if (string.IsNullOrWhiteSpace(_options.DeploymentName))
+            {
+                throw new InvalidOperationException(
+                    "Azure OpenAI deployment name is not configured. Set AzureOpenAI:DeploymentName to an existing deployment in your Azure OpenAI resource."
+                );
+            }
+
+            var credential = new AzureKeyCredential(_options.ApiKey);
+            var normalizedEndpoint = NormalizeEndpoint(_options.Endpoint);
+            var openAiClient = new AzureOpenAIClient(new Uri(normalizedEndpoint), credential);
+            _chatClient = openAiClient.GetChatClient(_options.DeploymentName);
+            return _chatClient;
+        }
     }
 
     private static string NormalizeEndpoint(string endpoint)
@@ -87,7 +124,7 @@ public sealed class AzureOpenAiClient : ILlmClient
                 ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
             };
 
-            var response = await _chatClient.CompleteChatAsync(messages, completionOptions, cancellationToken);
+            var response = await GetChatClient().CompleteChatAsync(messages, completionOptions, cancellationToken);
             var chatCompletion = response.Value;
 
             stopwatch.Stop();
@@ -162,7 +199,7 @@ public sealed class AzureOpenAiClient : ILlmClient
                 ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
             };
 
-            var streamingResult = _chatClient.CompleteChatStreamingAsync(messages, completionOptions, cancellationToken);
+            var streamingResult = GetChatClient().CompleteChatStreamingAsync(messages, completionOptions, cancellationToken);
 
             await foreach (var update in streamingResult)
             {
@@ -231,7 +268,7 @@ public sealed class AzureOpenAiClient : ILlmClient
                 MaxOutputTokenCount = 5
             };
 
-            await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+            await GetChatClient().CompleteChatAsync(messages, options, cancellationToken);
             return true;
         }
         catch

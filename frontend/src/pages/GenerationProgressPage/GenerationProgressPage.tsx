@@ -27,6 +27,10 @@ export function GenerationProgressPage() {
   const [insufficientContentNotes, setInsufficientContentNotes] = useState<string[]>([]);
 
   const isAzureOpenAi404Error = !!error && /azure openai/i.test(error) && /\b404\b/i.test(error);
+  const isAzureOpenAiMissingKeyError = !!error && (
+    /azure openai api key is not configured/i.test(error) ||
+    /\(parameter 'key'\)/i.test(error)
+  );
   const isMcpContentError = !!error && /no content.*mcp|no content found for selected topics|insufficient content/i.test(error);
 
   // Redirect if no generation started
@@ -207,6 +211,11 @@ export function GenerationProgressPage() {
               incorrect (endpoint or deployment name). Verify your Azure OpenAI resource endpoint and that the
               configured deployment name exists.
             </p>
+          ) : isAzureOpenAiMissingKeyError ? (
+            <p className={styles.errorHelp}>
+              Azure OpenAI is not configured with an API key. Set `AzureOpenAI:ApiKey` for the backend (for example via
+              environment variable `AZUREOPENAI__APIKEY`, user-secrets, or Key Vault), then retry.
+            </p>
           ) : isMcpContentError ? (
             <p className={styles.errorHelp}>
               This may be due to insufficient content from Microsoft Learn for the selected topics. Try selecting
@@ -229,8 +238,9 @@ export function GenerationProgressPage() {
                 </pre>
               ) : (
                 <p className={styles.errorHelp}>
-                  No MCP queries were returned by the API for this generation. Ensure the API is running in
-                  Development mode so it includes query traces in the generation status response.
+                  {isAzureOpenAi404Error || isAzureOpenAiMissingKeyError
+                    ? 'This generation failed before MCP retrieval ran, so no MCP queries were expected.'
+                    : 'No MCP queries were returned by the API for this generation. Ensure the API is running in Development mode so it includes query traces in the generation status response.'}
                 </p>
               )}
             </div>
