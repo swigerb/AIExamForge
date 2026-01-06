@@ -47,6 +47,35 @@ public sealed class OutlineEndpointsTests(ApiWebApplicationFactory factory) : IC
     }
 
     [Fact]
+    public async Task Get_ById_AfterParse_ReturnsPersistedNodes()
+    {
+        var parseResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest
+        {
+            Text = "1. Compute\n1.1 Azure Functions\n- Triggers",
+            ExamName = "AZ-204"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, parseResp.StatusCode);
+
+        var parsed = await parseResp.Content.ReadFromJsonAsync<OutlineResponse>();
+        Assert.NotNull(parsed);
+        Assert.NotEqual(Guid.Empty, parsed!.Id);
+        Assert.NotEmpty(parsed.Nodes);
+
+        var getResp = await _client.GetAsync($"/api/outlines/{parsed.Id}");
+        Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
+
+        var reloaded = await getResp.Content.ReadFromJsonAsync<OutlineResponse>();
+        Assert.NotNull(reloaded);
+        Assert.Equal(parsed.Id, reloaded!.Id);
+        Assert.NotEmpty(reloaded.Nodes);
+
+        // Ensure we rehydrate the hierarchy (not just an empty shell outline).
+        var root = Assert.Single(reloaded.Nodes);
+        Assert.NotEmpty(root.Children);
+    }
+
+    [Fact]
     public async Task Get_UserOutlines_ReturnsOk()
     {
         // Ensure at least one outline exists for the test user

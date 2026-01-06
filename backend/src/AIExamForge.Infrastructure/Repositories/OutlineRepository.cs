@@ -16,9 +16,68 @@ public class OutlineRepository : IOutlineRepository
 
     public async Task<Outline?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        // Note: RootNodes are loaded separately since it's a backing field
-        return await _context.Outlines
+        // RootNodes are a backing field; materialize the tree from OutlineNodes.
+        var outline = await _context.Outlines
+            .AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+
+        if (outline == null)
+        {
+            return null;
+        }
+
+        var nodes = await _context.OutlineNodes
+            .AsNoTracking()
+            .Where(n => n.OutlineId == id)
+            .OrderBy(n => n.ParentId)
+            .ThenBy(n => n.SortOrder)
+            .ToListAsync(cancellationToken);
+
+        if (nodes.Count == 0)
+        {
+            return outline;
+        }
+
+        // Rebuild in-memory hierarchy based on ParentId / SortOrder.
+        var rootNodes = new List<OutlineNode>();
+        var childrenByParentId = new Dictionary<Guid, List<OutlineNode>>();
+
+        foreach (var node in nodes)
+        {
+            if (node.ParentId is null)
+            {
+                rootNodes.Add(node);
+                continue;
+            }
+
+            if (!childrenByParentId.TryGetValue(node.ParentId.Value, out var children))
+            {
+                children = [];
+                childrenByParentId[node.ParentId.Value] = children;
+            }
+
+            children.Add(node);
+        }
+
+        rootNodes.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        foreach (var children in childrenByParentId.Values)
+        {
+            children.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        }
+
+        foreach (var parent in nodes)
+        {
+            if (childrenByParentId.TryGetValue(parent.Id, out var children))
+            {
+                foreach (var child in children)
+                {
+                    parent.AddChild(child);
+                }
+            }
+        }
+
+        outline.SetParsedNodes(rootNodes);
+        return outline;
     }
 
     public async Task<IReadOnlyList<Outline>> GetByUserIdAsync(string userId, CancellationToken cancellationToken = default)
@@ -48,6 +107,13 @@ public class OutlineRepository : IOutlineRepository
     public async Task AddAsync(Outline outline, CancellationToken cancellationToken = default)
     {
         await _context.Outlines.AddAsync(outline, cancellationToken);
+
+        // RootNodes are ignored by EF configuration, so persist nodes explicitly.
+        var nodes = outline.GetAllNodes().ToList();
+        if (nodes.Count > 0)
+        {
+            await _context.OutlineNodes.AddRangeAsync(nodes, cancellationToken);
+        }
     }
 
     public Task UpdateAsync(Outline outline, CancellationToken cancellationToken = default)
@@ -61,6 +127,13 @@ public class OutlineRepository : IOutlineRepository
         var outline = await _context.Outlines.FindAsync([id], cancellationToken);
         if (outline != null)
         {
+            var nodes = await _context.OutlineNodes
+                .Where(n => n.OutlineId == id)
+                .ToListAsync(cancellationToken);
+            if (nodes.Count > 0)
+            {
+                _context.OutlineNodes.RemoveRange(nodes);
+            }
             _context.Outlines.Remove(outline);
         }
     }
