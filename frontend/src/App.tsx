@@ -8,7 +8,6 @@ import {
   GenerationProgressPage,
   ExportResultsPage,
 } from './pages';
-import './styles/globals.css';
 
 function App() {
   return (

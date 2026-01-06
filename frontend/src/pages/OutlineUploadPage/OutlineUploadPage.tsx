@@ -117,6 +117,7 @@ export function OutlineUploadPage() {
             {inputMode === 'text' ? (
               <TextArea
                 label="Exam Outline"
+                className={styles.outlineTextArea}
                 placeholder="Paste your exam outline here...
 
 Example:

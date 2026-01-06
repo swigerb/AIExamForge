@@ -23,8 +23,8 @@
   font-family: inherit;
   color: var(--color-text);
   background-color: var(--color-background);
-  border: 2px solid var(--color-border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   resize: vertical;
   transition: border-color 0.2s, box-shadow 0.2s;
 }

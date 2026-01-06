@@ -176,16 +176,22 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.75rem;
-  background: transparent;
-  border: 2px solid var(--color-border);
-  border-radius: 0.5rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.1s;
 }
 
 .formatCard:hover {
   border-color: var(--color-primary);
-  background-color: var(--color-background-hover);
+  background-color: var(--color-background-muted);
+}
+
+.formatCard:active {
+  transform: translateY(0.5px);
 }
 
 .formatCard:focus-visible {
@@ -196,6 +202,7 @@
 .formatCardSelected {
   border-color: var(--color-primary);
   background-color: var(--color-primary-light);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 .formatIcon {
@@ -205,7 +212,7 @@
 
 .formatName {
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .notesList {

@@ -93,7 +93,7 @@ Respond ONLY with a valid JSON object in the following format:
             ""content"": {
                 // Item-type-specific fields (MUST match the item type schema)
             },
-            ""rationale"": ""(optional study-mode explanation)""
+                        ""rationale"": ""Study-mode explanation. REQUIRED.""
         }
     ]
 }
@@ -103,6 +103,16 @@ Rules:
 - Do NOT include any text before or after the JSON.
 - Use property names exactly as shown.
 - The ""content"" object MUST match the schema for the given ""itemTypeCode"".
+- Do NOT include explanations in the stem, instruction, or answer choice text.
+
+Rationale formatting rules (MUST follow exactly):
+- The rationale MUST include a separate explanation for the correct answer and for each incorrect answer choice.
+- For each correct answer choice key (e.g., A), include a sentence that begins EXACTLY with:
+    ""This is the correct answer for {LETTER}. It is 100% correct because""
+- For each incorrect answer, include a sentence that begins EXACTLY with:
+    ""This is a distractor. It is 100% incorrect because""
+- Include at least one Microsoft Learn URL in the rationale, using this form:
+    https://learn.microsoft.com/...
 ";
     }
 }

@@ -15,7 +15,7 @@
   gap: 0.5rem;
   padding: 0.5rem;
   background-color: var(--color-background-muted);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   flex-wrap: wrap;
 }
 
@@ -51,8 +51,8 @@
   list-style: none;
   padding: 0;
   margin: 0;
-  border: 2px solid var(--color-border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   max-height: 400px;
   overflow-y: auto;
 }

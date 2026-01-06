@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Application.Generation.Interfaces;
 using AIExamForge.Application.Mcp;
@@ -671,7 +672,18 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             result.AddLintViolation(violation);
         }
 
+        // Rationale format validation (per-choice explanation phrasing + Microsoft Learn citation URL)
+        foreach (var rationaleError in ValidateRationaleFormat(itemTypeCode, normalizedContent, parsed.Rationale))
+        {
+            result.AddError(rationaleError);
+        }
+
         return result;
+    }
+
+    internal static List<string> ValidateRationaleFormatForTests(string itemTypeCode, JsonElement? content, string? rationale)
+    {
+        return ValidateRationaleFormat(itemTypeCode, content, rationale);
     }
 
     internal static JsonElement? NormalizeItemTypeContentForTests(string itemTypeCode, JsonElement content)
@@ -974,6 +986,134 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         }
 
         return [];
+    }
+
+    private static List<string> ValidateRationaleFormat(string itemTypeCode, JsonElement? content, string? rationale)
+    {
+        // Only enforce for item types that use a single "choices" list with explicit correct choice key(s).
+        // This avoids false failures for formats like DA (separate correctAnswers/distractors), DOMC (variants), etc.
+        var (choiceKeys, correctKeys) = ExtractChoiceKeysAndCorrectKeys(content);
+        if (choiceKeys.Count == 0 || correctKeys.Count == 0)
+        {
+            return [];
+        }
+
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(rationale))
+        {
+            errors.Add("Rationale is required and must include per-choice explanations and a Microsoft Learn URL.");
+            return errors;
+        }
+
+        // Require at least one Microsoft Learn URL anywhere in the rationale.
+        if (!Regex.IsMatch(rationale, @"https://learn\.microsoft\.com/\S+", RegexOptions.CultureInvariant))
+        {
+            errors.Add("Rationale must include at least one Microsoft Learn URL (https://learn.microsoft.com/...).");
+        }
+
+        // For each correct choice key, require the exact correct-answer prefix.
+        foreach (var correctKey in correctKeys.OrderBy(k => k, StringComparer.Ordinal))
+        {
+            var required = $"This is the correct answer for {correctKey}. It is 100% correct because";
+            if (!rationale.Contains(required, StringComparison.Ordinal))
+            {
+                errors.Add($"Rationale must include the exact correct-answer phrase for {correctKey}: '{required}'");
+            }
+        }
+
+        // For each incorrect choice, require a distractor prefix occurrence.
+        var incorrectCount = choiceKeys.Count(k => !correctKeys.Contains(k));
+        if (incorrectCount > 0)
+        {
+            const string distractorPrefix = "This is a distractor. It is 100% incorrect because";
+            var matches = Regex.Matches(rationale, Regex.Escape(distractorPrefix), RegexOptions.CultureInvariant);
+            if (matches.Count < incorrectCount)
+            {
+                errors.Add($"Rationale must include the distractor phrase '{distractorPrefix}' at least {incorrectCount} time(s) (once per incorrect answer). Found: {matches.Count}.");
+            }
+        }
+
+        return errors;
+    }
+
+    private static (List<string> ChoiceKeys, HashSet<string> CorrectKeys) ExtractChoiceKeysAndCorrectKeys(JsonElement? content)
+    {
+        content = NormalizeContentElement(content);
+        if (content is null || content.Value.ValueKind != JsonValueKind.Object)
+        {
+            return ([], new HashSet<string>(StringComparer.Ordinal));
+        }
+
+        var choiceKeys = new List<string>();
+        var correctKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        try
+        {
+            if (content.Value.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var choice in choices.EnumerateArray())
+                {
+                    if (choice.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    if (choice.TryGetProperty("key", out var keyProp) && keyProp.ValueKind == JsonValueKind.String)
+                    {
+                        var key = keyProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(key))
+                        {
+                            choiceKeys.Add(key.Trim());
+                        }
+                    }
+
+                    // Back-compat: some legacy shapes include isCorrect on each choice.
+                    if (choice.TryGetProperty("isCorrect", out var isCorrect) && isCorrect.ValueKind == JsonValueKind.True)
+                    {
+                        if (choice.TryGetProperty("key", out var correctKeyProp) && correctKeyProp.ValueKind == JsonValueKind.String)
+                        {
+                            var key = correctKeyProp.GetString();
+                            if (!string.IsNullOrWhiteSpace(key))
+                            {
+                                correctKeys.Add(key.Trim());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (content.Value.TryGetProperty("correctChoiceKey", out var correctChoiceKey) && correctChoiceKey.ValueKind == JsonValueKind.String)
+            {
+                var key = correctChoiceKey.GetString();
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    correctKeys.Add(key.Trim());
+                }
+            }
+
+            if (content.Value.TryGetProperty("correctChoiceKeys", out var correctChoiceKeys) && correctChoiceKeys.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var keyProp in correctChoiceKeys.EnumerateArray())
+                {
+                    if (keyProp.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    var key = keyProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(key))
+                    {
+                        correctKeys.Add(key.Trim());
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort extraction; schema validation handles structural errors.
+        }
+
+        return (choiceKeys, correctKeys);
     }
 
     private static Domain.ValueObjects.RenderMode MapRenderMode(DTOs.RenderMode dto)
