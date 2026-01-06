@@ -89,17 +89,39 @@ export function useWizard(): WizardContextValue {
 
 interface WizardProviderProps {
   children: ReactNode;
+  initialState?: Partial<WizardState>;
 }
 
-export function WizardProvider({ children }: WizardProviderProps) {
-  const [outline, setOutlineState] = useState<OutlineResponse | null>(defaultState.outline);
-  const [selectedNodeIds, setSelectedNodeIdsState] = useState<Set<string>>(defaultState.selectedNodeIds);
-  const [questionCount, setQuestionCountState] = useState(defaultState.questionCount);
-  const [questionTypes, setQuestionTypesState] = useState<ItemTypeCode[]>(defaultState.questionTypes);
-  const [renderMode, setRenderModeState] = useState<RenderMode>(defaultState.renderMode);
-  const [difficulty, setDifficultyState] = useState<DifficultyDistribution>(defaultState.difficulty);
-  const [generationId, setGenerationIdState] = useState<string | null>(defaultState.generationId);
-  const [generation, setGenerationState] = useState<GenerationResponse | null>(defaultState.generation);
+export function WizardProvider({ children, initialState }: WizardProviderProps) {
+  const initialSelectedNodeIds =
+    initialState?.selectedNodeIds instanceof Set
+      ? new Set(initialState.selectedNodeIds)
+      : defaultState.selectedNodeIds;
+
+  const [outline, setOutlineState] = useState<OutlineResponse | null>(
+    initialState?.outline ?? defaultState.outline
+  );
+  const [selectedNodeIds, setSelectedNodeIdsState] = useState<Set<string>>(
+    initialSelectedNodeIds
+  );
+  const [questionCount, setQuestionCountState] = useState(
+    initialState?.questionCount ?? defaultState.questionCount
+  );
+  const [questionTypes, setQuestionTypesState] = useState<ItemTypeCode[]>(
+    initialState?.questionTypes ?? defaultState.questionTypes
+  );
+  const [renderMode, setRenderModeState] = useState<RenderMode>(
+    initialState?.renderMode ?? defaultState.renderMode
+  );
+  const [difficulty, setDifficultyState] = useState<DifficultyDistribution>(
+    initialState?.difficulty ?? defaultState.difficulty
+  );
+  const [generationId, setGenerationIdState] = useState<string | null>(
+    initialState?.generationId ?? defaultState.generationId
+  );
+  const [generation, setGenerationState] = useState<GenerationResponse | null>(
+    initialState?.generation ?? defaultState.generation
+  );
 
   const setOutline = useCallback((o: OutlineResponse | null) => {
     setOutlineState(o);

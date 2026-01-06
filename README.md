@@ -39,7 +39,7 @@ AI Exam Forge generates high-quality practice exam questions by leveraging Micro
 | Tool | Version | Purpose |
 |------|---------|---------|
 | .NET SDK | 10.0+ | Backend runtime |
-| Node.js | 20.x LTS | Frontend tooling |
+| Node.js | 20.19+ LTS | Frontend tooling |
 | Azure CLI | Latest | Cloud resource management |
 | Git | Latest | Version control |
 
@@ -124,6 +124,8 @@ dotnet test
 cd frontend
 npm test
 ```
+
+Frontend tests are executed with Vitest.
 
 ### Common Issues
 

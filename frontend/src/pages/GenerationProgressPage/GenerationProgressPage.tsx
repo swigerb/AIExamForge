@@ -102,7 +102,9 @@ export function GenerationProgressPage() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.problemDetails.detail || err.problemDetails.title);
+        const message = err.problemDetails.detail || err.problemDetails.title;
+        // If we already have an error (e.g., connection lost), keep it.
+        setError((prev) => prev ?? message);
       }
     }
   }, [generationId, setGeneration]);
