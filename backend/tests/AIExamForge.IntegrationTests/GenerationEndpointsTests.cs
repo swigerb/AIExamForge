@@ -61,6 +61,39 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
     }
 
     [Fact]
+    public async Task Post_StartGeneration_Valid_ImmediatelyQueryable_DoesNot404()
+    {
+        // Create an outline first to have a real outlineId/nodeId
+        var outlineResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest
+        {
+            Text = "1. Compute\n1.1 Azure App Service",
+            ExamName = "AZ-204"
+        });
+        var outline = await outlineResp.Content.ReadFromJsonAsync<AIExamForge.Application.Parsing.DTOs.OutlineResponse>();
+        Assert.NotNull(outline);
+
+        var nodeId = outline!.Nodes.First().Id;
+        var req = new GenerationRequestDto
+        {
+            OutlineId = outline.Id,
+            SelectedNodeIds = new[] { nodeId },
+            QuestionCount = 1,
+            QuestionTypes = new[] { "M1" },
+            RenderMode = DtoRenderMode.Study
+        };
+
+        var resp = await _client.PostAsJsonAsync("/api/generations", req);
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+
+        var start = await resp.Content.ReadFromJsonAsync<GenerationStartResponse>();
+        Assert.NotNull(start);
+        Assert.NotEqual(Guid.Empty, start!.GenerationId);
+
+        var get = await _client.GetAsync($"/api/generations/{start.GenerationId}");
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+    }
+
+    [Fact]
     public async Task Post_StartGeneration_AllowsStringEnum_RenderMode()
     {
         var outlineResp = await _client.PostAsJsonAsync("/api/outlines/parse", new ParseOutlineRequest

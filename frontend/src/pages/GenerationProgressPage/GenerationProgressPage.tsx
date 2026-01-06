@@ -186,6 +186,24 @@ export function GenerationProgressPage() {
             This may be due to insufficient content from Microsoft Learn for the selected topics.
             Try selecting different sections or reducing the question count.
           </p>
+          {import.meta.env.DEV && (
+            <div>
+              <p className={styles.errorHelp}>Development: MCP queries sent</p>
+              {generation?.devMcpQueries && generation.devMcpQueries.length > 0 ? (
+                <pre style={{ whiteSpace: 'pre-wrap' }} aria-label="MCP queries">
+                  {generation.devMcpQueries
+                    .map((q) => q.query)
+                    .filter(Boolean)
+                    .join('\n\n')}
+                </pre>
+              ) : (
+                <p className={styles.errorHelp}>
+                  No MCP queries were returned by the API for this generation. Ensure the API is running in
+                  Development mode so it includes query traces in the generation status response.
+                </p>
+              )}
+            </div>
+          )}
         </Alert>
       )}
 

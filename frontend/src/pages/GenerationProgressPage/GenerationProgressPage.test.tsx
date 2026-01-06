@@ -140,3 +140,31 @@ test('on connection loss, keeps the connection error when final status fetch fai
   // Since fetchFinalResults fails, the original connection error should remain visible.
   expect(await screen.findByRole('alert')).toHaveTextContent('Connection to generation stream lost')
 })
+
+test('in dev, shows MCP queries when provided on the generation', async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: 'g1',
+    status: 'Failed',
+    progress: 0,
+    errorMessage: 'Generation failed',
+    createdAt: new Date().toISOString(),
+    devMcpQueries: [
+      { timestamp: new Date().toISOString(), outlineNodeId: 'n1', query: 'Azure Functions triggers http' },
+    ],
+  } as any)
+
+  vi.mocked(api.subscribeToGeneration).mockImplementation((_id, _onEvent, onError) => {
+    onError?.(new Error('Connection to generation stream lost'))
+    return () => {}
+  })
+
+  renderWithProviders(<GenerationProgressPage />, {
+    route: '/progress',
+    wizardInitialState: { generationId: 'g1', questionCount: 1 } as any,
+  })
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(/generation failed/i)
+  expect(await screen.findByLabelText(/mcp queries/i)).toHaveTextContent(
+    'Azure Functions triggers http'
+  )
+})

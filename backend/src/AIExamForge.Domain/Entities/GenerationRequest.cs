@@ -56,6 +56,57 @@ public sealed class GenerationRequest
         string? examName = null,
         string? toneProfile = null)
     {
+        return CreateInternal(
+            id: null,
+            userId,
+            outlineId,
+            selectedNodeIds,
+            questionCount,
+            itemTypes,
+            difficultyDistribution,
+            examName,
+            toneProfile);
+    }
+
+    public static GenerationRequest CreateWithId(
+        Guid id,
+        string userId,
+        Guid outlineId,
+        IEnumerable<Guid> selectedNodeIds,
+        int questionCount,
+        IEnumerable<ItemTypeCode> itemTypes,
+        DifficultyDistribution? difficultyDistribution = null,
+        string? examName = null,
+        string? toneProfile = null)
+    {
+        if (id == Guid.Empty)
+        {
+            throw new ArgumentException("Generation ID cannot be empty.", nameof(id));
+        }
+
+        return CreateInternal(
+            id,
+            userId,
+            outlineId,
+            selectedNodeIds,
+            questionCount,
+            itemTypes,
+            difficultyDistribution,
+            examName,
+            toneProfile);
+    }
+
+    private static GenerationRequest CreateInternal(
+        Guid? id,
+        string userId,
+        Guid outlineId,
+        IEnumerable<Guid> selectedNodeIds,
+        int questionCount,
+        IEnumerable<ItemTypeCode> itemTypes,
+        DifficultyDistribution? difficultyDistribution,
+        string? examName,
+        string? toneProfile)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId, nameof(userId));
 
         var nodeIdList = selectedNodeIds.ToList();
@@ -79,7 +130,7 @@ public sealed class GenerationRequest
 
         var request = new GenerationRequest
         {
-            Id = Guid.NewGuid(),
+            Id = id ?? Guid.NewGuid(),
             UserId = userId,
             OutlineId = outlineId,
             QuestionCount = questionCount,

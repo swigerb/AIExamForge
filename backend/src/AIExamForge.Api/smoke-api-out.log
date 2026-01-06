@@ -1,0 +1,16 @@
+Using launch settings from C:\Users\brswig\AIExamForge\backend\src\AIExamForge.Api\Properties\launchSettings.json...
+Building...
+info: AIExamForge.Infrastructure.TypeRegistry.ItemTypeRegistryInitializerHostedService[0]
+      Initializing ItemTypeRegistry. SchemasBasePath=C:\Users\brswig\AIExamForge\docs\schemas\common, PromptsBasePath=C:\Users\brswig\AIExamForge\prompts
+info: AIExamForge.Infrastructure.TypeRegistry.ItemTypeRegistry[0]
+      Initializing ItemTypeRegistry from C:\Users\brswig\AIExamForge\docs\schemas\common and C:\Users\brswig\AIExamForge\prompts
+info: AIExamForge.Infrastructure.TypeRegistry.ItemTypeRegistry[0]
+      ItemTypeRegistry initialized with 19 schemas and 19 prompts
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5180
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Users\brswig\AIExamForge\backend\src\AIExamForge.Api

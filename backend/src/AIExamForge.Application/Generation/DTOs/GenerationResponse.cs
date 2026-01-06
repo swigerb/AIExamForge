@@ -46,6 +46,19 @@ public sealed record GenerationResponse
     /// These questions were not generated.
     /// </summary>
     public IReadOnlyList<string> InsufficientContentNotes { get; init; } = [];
+
+    /// <summary>
+    /// Development-only diagnostic data: the MCP queries sent while retrieving Learn content.
+    /// Omitted in non-Development environments.
+    /// </summary>
+    public IReadOnlyList<McpQueryTraceDto>? DevMcpQueries { get; init; }
+}
+
+public sealed record McpQueryTraceDto
+{
+    public DateTimeOffset Timestamp { get; init; }
+    public Guid? OutlineNodeId { get; init; }
+    public required string Query { get; init; }
 }
 
 /// <summary>

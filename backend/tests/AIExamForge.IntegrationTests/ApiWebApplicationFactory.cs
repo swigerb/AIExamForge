@@ -80,13 +80,27 @@ internal sealed class FakeQuestionGenerationService : IQuestionGenerationService
     public Task<AIExamForge.Application.Generation.GenerationResult> GenerateAsync(
         AIExamForge.Application.Generation.DTOs.GenerationRequestDto requestDto,
         string userId,
+        Guid? generationId = null,
         CancellationToken cancellationToken = default)
         => Task.FromResult(AIExamForge.Application.Generation.GenerationResult.Succeeded(
-            requestId: Guid.NewGuid(),
+            requestId: generationId ?? Guid.NewGuid(),
             questionSetId: Guid.NewGuid(),
             generated: 0,
             failed: 0,
             sourceUrls: []));
+
+    public async Task<AIExamForge.Application.Generation.GenerationResult> GenerateStreamingAsync(
+        AIExamForge.Application.Generation.DTOs.GenerationRequestDto requestDto,
+        string userId,
+        Guid? generationId,
+        Func<AIExamForge.Application.Generation.GenerationProgress, Task> onProgress,
+        CancellationToken cancellationToken = default)
+    {
+        await onProgress(AIExamForge.Application.Generation.GenerationProgress.Started("Starting generation"));
+        await onProgress(AIExamForge.Application.Generation.GenerationProgress.Completed(generated: 0, failed: 0));
+
+        return await GenerateAsync(requestDto, userId, generationId, cancellationToken);
+    }
 
     public Task<AIExamForge.Application.Generation.GenerationResult> RegenerateAllAsync(
         Guid generationRequestId,

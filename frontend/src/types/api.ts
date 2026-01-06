@@ -155,6 +155,11 @@ export interface GenerationResponse {
   createdAt: string;
   completedAt?: string;
   insufficientContentNotes?: string[];
+  devMcpQueries?: Array<{
+    timestamp: string;
+    outlineNodeId?: string;
+    query: string;
+  }>;
 }
 
 // ============================================================================

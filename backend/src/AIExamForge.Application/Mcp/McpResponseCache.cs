@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.Models;
 using Microsoft.Extensions.Logging;
 
@@ -189,6 +190,12 @@ public sealed class CachedMcpRetrievalService
 
         return content;
     }
+
+    public Task<McpContentCollection> RetrieveForNodesAsync(
+        IEnumerable<OutlineNode> nodes,
+        Guid? generationId,
+        CancellationToken cancellationToken = default)
+        => _innerService.RetrieveForNodesAsync(nodes, generationId, cancellationToken);
 
     /// <summary>
     /// Gets cache statistics.

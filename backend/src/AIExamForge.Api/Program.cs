@@ -1,8 +1,10 @@
 using AIExamForge.Api.Endpoints;
 using AIExamForge.Api.Extensions;
+using AIExamForge.Api.Services;
 using AIExamForge.Api.Streaming;
 using AIExamForge.Application;
 using AIExamForge.Application.Mcp;
+using AIExamForge.Application.Mcp.Interfaces;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Infrastructure;
 using AIExamForge.Infrastructure.Data;
@@ -95,6 +97,9 @@ builder.Services.AddProblemDetails(options =>
 
 // Add SSE handler for streaming
 builder.Services.AddSingleton<GenerationProgressHandler>();
+
+// Development diagnostics: capture MCP query strings per generation.
+builder.Services.AddSingleton<IMcpQueryTraceStore, InMemoryMcpQueryTraceStore>();
 
 var app = builder.Build();
 

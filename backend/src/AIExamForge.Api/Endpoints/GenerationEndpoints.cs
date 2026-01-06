@@ -4,6 +4,8 @@ using AIExamForge.Api.Streaming;
 using AIExamForge.Application.Generation;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Application.Generation.Interfaces;
+using AIExamForge.Application.Mcp.Interfaces;
+using AIExamForge.Domain.Entities;
 using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.Repositories;
 using AIExamForge.Domain.ValueObjects;
@@ -95,8 +97,9 @@ Creates a new question set, keeping the original for comparison.
     private static async Task<IResult> StartGeneration(
         [FromBody] GenerationRequestDto request,
         [FromServices] IValidator<GenerationRequestDto> validator,
-        [FromServices] IQuestionGenerationService generationService,
-        [FromServices] IGenerationRequestRepository generationRepository,
+        [FromServices] IUnitOfWork unitOfWork,
+        [FromServices] IServiceScopeFactory scopeFactory,
+        [FromServices] GenerationProgressHandler progressHandler,
         HttpContext httpContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -117,28 +120,74 @@ Creates a new question set, keeping the original for comparison.
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        // Start generation (creates GenerationRequest entity with Pending status)
-        // The service handles creating the GenerationRequest internally
+        // Create a stable ID up front so the client can immediately subscribe to SSE / poll status.
+        var generationId = Guid.NewGuid();
 
-        // Get user ID for the background task
+        // Persist an initial request record synchronously so the client can immediately poll status.
+        // The background generator will reuse this record and update status as it progresses.
+        var itemTypes = request.QuestionTypes.Select(ItemTypeCode.Create).ToList();
+        var difficultyDistribution = request.Difficulty is not null
+            ? DifficultyDistribution.Create(
+                request.Difficulty.EasyPercent,
+                request.Difficulty.MediumPercent,
+                request.Difficulty.HardPercent)
+            : DifficultyDistribution.Default;
+
+        var generationRequest = GenerationRequest.CreateWithId(
+            generationId,
+            userId,
+            request.OutlineId,
+            request.SelectedNodeIds,
+            request.QuestionCount,
+            itemTypes,
+            difficultyDistribution,
+            toneProfile: request.ToneProfile?.ToString());
+
+        await unitOfWork.GenerationRequests.AddAsync(generationRequest, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Queue background generation with SSE progress callbacks.
+        // IMPORTANT: This must run in its own DI scope so scoped services (DbContext) are not disposed
+        // when the HTTP request ends.
         var userIdForTask = userId;
-
-        // Queue background generation
         _ = Task.Run(async () =>
         {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var generationService = scope.ServiceProvider.GetRequiredService<IQuestionGenerationService>();
+
             try
             {
-                await generationService.GenerateAsync(request, userIdForTask, CancellationToken.None);
+                await generationService.GenerateStreamingAsync(
+                    request,
+                    userIdForTask,
+                    generationId,
+                    async p =>
+                    {
+                        if (p.Status == GenerationProgressStatus.Failed)
+                        {
+                            await progressHandler.SendErrorAsync(generationId, p.Message);
+                            return;
+                        }
+
+                        if (p.Status == GenerationProgressStatus.Completed)
+                        {
+                            await progressHandler.SendProgressAsync(generationId, 100, p.Message);
+                            await progressHandler.SendCompleteAsync(generationId);
+                            progressHandler.CleanupGeneration(generationId);
+                            return;
+                        }
+
+                        var pct = p.PercentComplete ?? 0;
+                        await progressHandler.SendProgressAsync(generationId, pct, p.Message);
+                    },
+                    CancellationToken.None);
             }
             catch (Exception ex)
             {
-                // Log the error - the generation status will be set to Failed by the service
-                Console.Error.WriteLine($"Generation failed: {ex.Message}");
+                await progressHandler.SendErrorAsync(generationId, $"Error: {ex.Message}");
+                progressHandler.CleanupGeneration(generationId);
             }
         }, CancellationToken.None);
-
-        // For now, return a placeholder ID - in a real implementation, the service would return the ID
-        var generationId = Guid.NewGuid();
 
         // Build response with stream URL
         var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
@@ -155,6 +204,8 @@ Creates a new question set, keeping the original for comparison.
         Guid generationId,
         [FromServices] IGenerationRequestRepository generationRepository,
         [FromServices] IQuestionSetRepository questionSetRepository,
+        [FromServices] IMcpQueryTraceStore traceStore,
+        [FromServices] IHostEnvironment environment,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
@@ -179,7 +230,15 @@ Creates a new question set, keeping the original for comparison.
             ErrorMessage = generationRequest.Status == GenerationStatus.Failed ? generationRequest.ErrorMessage : null,
             CreatedAt = generationRequest.CreatedAt,
             CompletedAt = generationRequest.CompletedAt,
-            InsufficientContentNotes = [] // Not tracked in entity yet
+            InsufficientContentNotes = [], // Not tracked in entity yet
+            DevMcpQueries = environment.IsDevelopment()
+                ? traceStore.GetQueries(generationId).Select(q => new McpQueryTraceDto
+                {
+                    Timestamp = q.Timestamp,
+                    OutlineNodeId = q.OutlineNodeId,
+                    Query = q.Query
+                }).ToList()
+                : null
         };
 
         // Include question set if completed

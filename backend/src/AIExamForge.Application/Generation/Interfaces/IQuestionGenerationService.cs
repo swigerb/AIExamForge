@@ -11,6 +11,14 @@ public interface IQuestionGenerationService
     Task<GenerationResult> GenerateAsync(
         GenerationRequestDto requestDto,
         string userId,
+        Guid? generationId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<GenerationResult> GenerateStreamingAsync(
+        GenerationRequestDto requestDto,
+        string userId,
+        Guid? generationId,
+        Func<GenerationProgress, Task> onProgress,
         CancellationToken cancellationToken = default);
 
     Task<GenerationResult> RegenerateAllAsync(

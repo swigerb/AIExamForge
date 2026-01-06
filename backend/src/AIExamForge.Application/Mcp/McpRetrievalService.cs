@@ -19,6 +19,7 @@ public sealed class McpRetrievalService
     private readonly IMemoryCache _cache;
     private readonly ILogger<McpRetrievalService> _logger;
     private readonly McpRetrievalOptions _options;
+    private readonly Interfaces.IMcpQueryTraceStore? _traceStore;
 
     // Cache content for 30 minutes (content doesn't change frequently)
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
@@ -27,12 +28,14 @@ public sealed class McpRetrievalService
         IMcpClient mcpClient,
         IMemoryCache cache,
         IOptions<McpRetrievalOptions> options,
-        ILogger<McpRetrievalService> logger)
+        ILogger<McpRetrievalService> logger,
+        Interfaces.IMcpQueryTraceStore? traceStore = null)
     {
         _mcpClient = mcpClient;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
+        _traceStore = traceStore;
     }
 
     /// <summary>
@@ -40,6 +43,7 @@ public sealed class McpRetrievalService
     /// </summary>
     public async Task<McpContent?> RetrieveForNodeAsync(
         OutlineNode node,
+        Guid? generationId = null,
         CancellationToken cancellationToken = default)
     {
         var cacheKey = $"mcp_node_{node.Id}";
@@ -51,6 +55,10 @@ public sealed class McpRetrievalService
         }
 
         var query = BuildQueryFromNode(node);
+        if (generationId.HasValue)
+        {
+            _traceStore?.RecordQuery(generationId.Value, node.Id, query);
+        }
         _logger.LogInformation("Querying MCP for node {NodeId}: {Query}", node.Id, query);
 
         var result = await _mcpClient.QueryAsync(query, cancellationToken);
@@ -58,13 +66,13 @@ public sealed class McpRetrievalService
         if (!result.Success)
         {
             _logger.LogWarning("MCP query failed for node {NodeId}: {Error}", node.Id, result.ErrorMessage);
-            return null;
+            return McpContent.Create(query, string.Empty, Array.Empty<string>(), result.QueryTimeMs, node.Id);
         }
 
         if (result.ContentChunks.Count == 0)
         {
             _logger.LogWarning("No content found for node {NodeId}: {Query}", node.Id, query);
-            return null;
+            return McpContent.Create(query, string.Empty, Array.Empty<string>(), result.QueryTimeMs, node.Id);
         }
 
         var combinedContent = result.GetCombinedContent();
@@ -108,6 +116,7 @@ public sealed class McpRetrievalService
     /// </summary>
     public async Task<McpContentCollection> RetrieveForNodesAsync(
         IEnumerable<OutlineNode> nodes,
+        Guid? generationId,
         CancellationToken cancellationToken = default)
     {
         var nodeList = nodes.ToList();
@@ -122,7 +131,7 @@ public sealed class McpRetrievalService
                 break;
             }
 
-            var content = await RetrieveForNodeAsync(node, cancellationToken);
+            var content = await RetrieveForNodeAsync(node, generationId, cancellationToken);
             if (content != null)
             {
                 contents.Add(content);

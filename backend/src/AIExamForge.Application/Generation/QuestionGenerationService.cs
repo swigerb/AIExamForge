@@ -31,8 +31,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
     private readonly ILintValidator _lintValidator;
     private readonly IItemTypeRegistry _itemTypeRegistry;
     private readonly IOutlineRepository _outlineRepository;
-    private readonly IGenerationRequestRepository _generationRequestRepository;
-    private readonly IQuestionSetRepository _questionSetRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<QuestionGenerationService> _logger;
 
     private const int MaxRetryAttempts = 3;
@@ -45,8 +44,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         ILintValidator lintValidator,
         IItemTypeRegistry itemTypeRegistry,
         IOutlineRepository outlineRepository,
-        IGenerationRequestRepository generationRequestRepository,
-        IQuestionSetRepository questionSetRepository,
+        IUnitOfWork unitOfWork,
         ILogger<QuestionGenerationService> logger)
     {
         _mcpService = mcpService;
@@ -56,8 +54,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         _lintValidator = lintValidator;
         _itemTypeRegistry = itemTypeRegistry;
         _outlineRepository = outlineRepository;
-        _generationRequestRepository = generationRequestRepository;
-        _questionSetRepository = questionSetRepository;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
@@ -67,6 +64,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
     public async Task<GenerationResult> GenerateAsync(
         GenerationRequestDto requestDto,
         string userId,
+        Guid? generationId = null,
         CancellationToken cancellationToken = default)
     {
         var requestId = Guid.NewGuid().ToString("N")[..8];
@@ -82,30 +80,43 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                 requestDto.Difficulty.HardPercent)
             : Domain.ValueObjects.DifficultyDistribution.Default;
 
-        var generationRequest = GenerationRequest.Create(
-            userId,
-            requestDto.OutlineId,
-            requestDto.SelectedNodeIds,
-            requestDto.QuestionCount,
-            itemTypes,
-            difficultyDistribution,
-            toneProfile: requestDto.ToneProfile?.ToString());
+        var generationRequest = generationId is Guid id
+            ? GenerationRequest.CreateWithId(
+                id,
+                userId,
+                requestDto.OutlineId,
+                requestDto.SelectedNodeIds,
+                requestDto.QuestionCount,
+                itemTypes,
+                difficultyDistribution,
+                toneProfile: requestDto.ToneProfile?.ToString())
+            : GenerationRequest.Create(
+                userId,
+                requestDto.OutlineId,
+                requestDto.SelectedNodeIds,
+                requestDto.QuestionCount,
+                itemTypes,
+                difficultyDistribution,
+                toneProfile: requestDto.ToneProfile?.ToString());
 
-        await _generationRequestRepository.AddAsync(generationRequest, cancellationToken);
+        await _unitOfWork.GenerationRequests.AddAsync(generationRequest, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         try
         {
             // Step 1: Retrieve MCP content
             generationRequest.StartContentRetrieval();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var outlineNodes = await GetOutlineNodesAsync(requestDto.OutlineId, requestDto.SelectedNodeIds, cancellationToken);
-            var mcpContent = await _mcpService.RetrieveForNodesAsync(outlineNodes, cancellationToken);
+            var mcpContent = await _mcpService.RetrieveForNodesAsync(outlineNodes, generationRequest.Id, cancellationToken);
 
             if (!mcpContent.HasContent)
             {
                 generationRequest.Fail("No content retrieved from MCP for the selected outline nodes.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, "No content available for generation.");
             }
 
@@ -114,7 +125,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
             // Step 2: Assemble prompt
             generationRequest.StartGeneration();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var prompt = await _promptAssembler.AssembleAsync(requestDto, outlineNodes, mcpContent, cancellationToken);
 
@@ -124,7 +136,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             if (!llmResponse.Success || string.IsNullOrEmpty(llmResponse.Content))
             {
                 generationRequest.Fail(llmResponse.ErrorMessage ?? "LLM generation failed without error message.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, llmResponse.ErrorMessage ?? "Generation failed.");
             }
 
@@ -133,12 +146,14 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             if (parsedQuestions.Count == 0)
             {
                 generationRequest.Fail("LLM response contained no valid questions.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, "No questions could be parsed from LLM response.");
             }
 
             generationRequest.StartValidation(parsedQuestions.Count);
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             // Step 5: Validate and create question set
             var questionSet = QuestionSet.Create(
@@ -155,14 +170,16 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             if (questionSet.TotalQuestions == 0)
             {
                 generationRequest.Fail("All generated questions failed validation.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, "All questions failed validation.", validationResults);
             }
 
             // Step 6: Persist question set
-            await _questionSetRepository.AddAsync(questionSet, cancellationToken);
+            await _unitOfWork.QuestionSets.AddAsync(questionSet, cancellationToken);
             generationRequest.Complete(questionSet.Id, questionSet.TotalQuestions);
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "[{RequestId}] Generation complete: {Valid}/{Total} questions validated",
@@ -178,14 +195,16 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         catch (OperationCanceledException)
         {
             generationRequest.Cancel();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[{RequestId}] Generation failed with exception", requestId);
             generationRequest.Fail($"Unexpected error: {ex.Message}");
-            await _generationRequestRepository.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
             return GenerationResult.Failed(generationRequest.Id, $"An unexpected error occurred: {ex.Message}");
         }
     }
@@ -196,12 +215,13 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
     public async Task<GenerationResult> GenerateStreamingAsync(
         GenerationRequestDto requestDto,
         string userId,
+        Guid? generationId,
         Func<GenerationProgress, Task> onProgress,
         CancellationToken cancellationToken = default)
     {
         await onProgress(GenerationProgress.Started("Initializing generation..."));
 
-        // Create domain entity
+        // Create or reuse domain entity
         var itemTypes = requestDto.QuestionTypes.Select(ItemTypeCode.Create).ToList();
         var difficultyDistribution = requestDto.Difficulty is not null
             ? Domain.ValueObjects.DifficultyDistribution.Create(
@@ -210,32 +230,72 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                 requestDto.Difficulty.HardPercent)
             : Domain.ValueObjects.DifficultyDistribution.Default;
 
-        var generationRequest = GenerationRequest.Create(
-            userId,
-            requestDto.OutlineId,
-            requestDto.SelectedNodeIds,
-            requestDto.QuestionCount,
-            itemTypes,
-            difficultyDistribution,
-            toneProfile: requestDto.ToneProfile?.ToString());
+        GenerationRequest generationRequest;
+        if (generationId is Guid id)
+        {
+            var existing = await _unitOfWork.GenerationRequests.GetByIdAsync(id, cancellationToken);
+            if (existing is not null)
+            {
+                if (existing.UserId != userId)
+                {
+                    throw new InvalidOperationException("GenerationRequest user mismatch.");
+                }
 
-        await _generationRequestRepository.AddAsync(generationRequest, cancellationToken);
+                if (existing.OutlineId != requestDto.OutlineId)
+                {
+                    throw new InvalidOperationException("GenerationRequest outline mismatch.");
+                }
+
+                generationRequest = existing;
+            }
+            else
+            {
+                generationRequest = GenerationRequest.CreateWithId(
+                    id,
+                    userId,
+                    requestDto.OutlineId,
+                    requestDto.SelectedNodeIds,
+                    requestDto.QuestionCount,
+                    itemTypes,
+                    difficultyDistribution,
+                    toneProfile: requestDto.ToneProfile?.ToString());
+
+                await _unitOfWork.GenerationRequests.AddAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+        }
+        else
+        {
+            generationRequest = GenerationRequest.Create(
+                userId,
+                requestDto.OutlineId,
+                requestDto.SelectedNodeIds,
+                requestDto.QuestionCount,
+                itemTypes,
+                difficultyDistribution,
+                toneProfile: requestDto.ToneProfile?.ToString());
+
+            await _unitOfWork.GenerationRequests.AddAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         try
         {
             // Step 1: MCP retrieval
             await onProgress(GenerationProgress.RetrievingContent("Retrieving content from Microsoft Learn..."));
             generationRequest.StartContentRetrieval();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var outlineNodes = await GetOutlineNodesAsync(requestDto.OutlineId, requestDto.SelectedNodeIds, cancellationToken);
-            var mcpContent = await _mcpService.RetrieveForNodesAsync(outlineNodes, cancellationToken);
+            var mcpContent = await _mcpService.RetrieveForNodesAsync(outlineNodes, generationRequest.Id, cancellationToken);
 
             if (!mcpContent.HasContent)
             {
                 await onProgress(GenerationProgress.Failed("No content found for selected topics."));
                 generationRequest.Fail("No content retrieved from MCP.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, "No content available.");
             }
 
@@ -248,7 +308,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             // Step 3: LLM generation with streaming
             await onProgress(GenerationProgress.Generating("Generating questions...", 0));
             generationRequest.StartGeneration();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var llmResponse = await _llmClient.GenerateStreamingAsync(
                 prompt,
@@ -264,7 +325,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             {
                 await onProgress(GenerationProgress.Failed("Generation failed."));
                 generationRequest.Fail(llmResponse.ErrorMessage ?? "LLM generation failed.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, llmResponse.ErrorMessage ?? "Generation failed.");
             }
 
@@ -272,7 +334,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             await onProgress(GenerationProgress.Validating("Validating generated questions..."));
             var parsedQuestions = ParseLlmResponse(llmResponse.Content);
             generationRequest.StartValidation(parsedQuestions.Count);
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var questionSet = QuestionSet.Create(
                 userId,
@@ -289,14 +352,16 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             {
                 await onProgress(GenerationProgress.Failed("All questions failed validation."));
                 generationRequest.Fail("All questions failed validation.");
-                await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return GenerationResult.Failed(generationRequest.Id, "All questions failed validation.", validationResults);
             }
 
             // Step 5: Persist
-            await _questionSetRepository.AddAsync(questionSet, cancellationToken);
+            await _unitOfWork.QuestionSets.AddAsync(questionSet, cancellationToken);
             generationRequest.Complete(questionSet.Id, questionSet.TotalQuestions);
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             await onProgress(GenerationProgress.Completed(questionSet.TotalQuestions, parsedQuestions.Count - questionSet.TotalQuestions));
 
@@ -311,14 +376,16 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         {
             await onProgress(GenerationProgress.Cancelled());
             generationRequest.Cancel();
-            await _generationRequestRepository.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
             throw;
         }
         catch (Exception ex)
         {
             await onProgress(GenerationProgress.Failed($"Error: {ex.Message}"));
             generationRequest.Fail(ex.Message);
-            await _generationRequestRepository.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, CancellationToken.None);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
             return GenerationResult.Failed(generationRequest.Id, ex.Message);
         }
     }
@@ -342,7 +409,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             }
 
             generationRequest.IncrementRetryCount();
-            await _generationRequestRepository.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.GenerationRequests.UpdateAsync(generationRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             if (attempt < MaxRetryAttempts)
             {
@@ -592,7 +660,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         _logger.LogInformation("Starting regeneration for request {GenerationRequestId}", generationRequestId);
 
         // Get existing generation request
-        var existingRequest = await _generationRequestRepository.GetByIdAsync(generationRequestId, cancellationToken);
+        var existingRequest = await _unitOfWork.GenerationRequests.GetByIdAsync(generationRequestId, cancellationToken);
         if (existingRequest == null)
         {
             return GenerationResult.Failed(generationRequestId, "Generation request not found.");
@@ -622,7 +690,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         };
 
         // Generate fresh questions
-        return await GenerateAsync(requestDto, userId, cancellationToken);
+        return await GenerateAsync(requestDto, userId, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -637,13 +705,13 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         _logger.LogInformation("Starting single question regeneration for {QuestionId}", questionId);
 
         // Get the question set containing this question
-        var questionSets = await _questionSetRepository.GetByUserIdAsync(userId, cancellationToken);
+        var questionSets = await _unitOfWork.QuestionSets.GetByUserIdAsync(userId, cancellationToken);
         QuestionSet? targetSet = null;
         Question? targetQuestion = null;
 
         foreach (var set in questionSets)
         {
-            var setWithQuestions = await _questionSetRepository.GetByIdWithQuestionsAsync(set.Id, cancellationToken);
+            var setWithQuestions = await _unitOfWork.QuestionSets.GetByIdWithQuestionsAsync(set.Id, cancellationToken);
             if (setWithQuestions == null)
             {
                 continue;
@@ -664,7 +732,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
         // Get the generation request to retrieve context
         var genRequestId = targetSet.GenerationRequestId;
-        var genRequest = await _generationRequestRepository.GetByIdAsync(genRequestId, cancellationToken);
+        var genRequest = await _unitOfWork.GenerationRequests.GetByIdAsync(genRequestId, cancellationToken);
         if (genRequest == null)
         {
             return QuestionRegenerationResult.Failed(questionId, "Original generation request not found.");
@@ -801,7 +869,8 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
         // Replace question in set
         targetSet.ReplaceQuestion(targetQuestion.Id, newQuestion);
-        await _questionSetRepository.UpdateAsync(targetSet, cancellationToken);
+        await _unitOfWork.QuestionSets.UpdateAsync(targetSet, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Successfully regenerated question {OldId} -> {NewId}", questionId, newQuestion.Id);
 
