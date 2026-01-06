@@ -5,10 +5,12 @@ using AIExamForge.Application.Parsing.DTOs;
 
 namespace AIExamForge.IntegrationTests;
 
-public sealed class QuestionEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
+public sealed class QuestionEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>, IDisposable
 {
     private readonly ApiWebApplicationFactory _factory = factory;
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Get_Question_Unknown_ReturnsNotFound()

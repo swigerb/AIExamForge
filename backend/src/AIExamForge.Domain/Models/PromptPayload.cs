@@ -68,24 +68,41 @@ public sealed record PromptPayload
     /// </summary>
     public string GetJsonSchemaInstruction()
     {
-        return @"
+                return @"
 Respond ONLY with a valid JSON object in the following format:
+
 {
-  ""questions"": [
-    {
-      ""id"": ""Q001"",
-      ""itemTypeCode"": ""M1"",
-      ""difficulty"": ""medium"",
-      ""stem"": ""Question text here"",
-      ""options"": [...],
-      ""correctAnswer"": ""A"",
-      ""explanation"": ""Explanation text here"",
-      ""sourceUrls"": [""https://learn.microsoft.com/...""]
-    }
-  ]
+    ""questions"": [
+        {
+            ""id"": ""Q001"",
+            ""itemTypeCode"": ""M1"",
+            ""title"": ""Short title"",
+            ""stem"": ""Question stem text"",
+            ""instruction"": ""(optional)"",
+            ""difficulty"": ""easy|medium|hard"",
+            ""tags"": {
+                ""exam"": ""AZ-204"",
+                ""objective"": ""Objective name"",
+                ""section"": ""Section name"",
+                ""topics"": [""Topic 1"", ""Topic 2""]
+            },
+            ""scoring"": {
+                ""model"": ""dichotomous|polytomous"",
+                ""maxPoints"": 1
+            },
+            ""content"": {
+                // Item-type-specific fields (MUST match the item type schema)
+            },
+            ""rationale"": ""(optional study-mode explanation)""
+        }
+    ]
 }
 
-Do NOT include any text before or after the JSON.
+Rules:
+- Output JSON only (no markdown, no prose).
+- Do NOT include any text before or after the JSON.
+- Use property names exactly as shown.
+- The ""content"" object MUST match the schema for the given ""itemTypeCode"".
 ";
     }
 }

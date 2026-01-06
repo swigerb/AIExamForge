@@ -11,14 +11,33 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace AIExamForge.IntegrationTests;
 
 public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private readonly string _dbName = $"AIExamForge_IntegrationTests_{Guid.NewGuid():N}";
+
+    public ApiWebApplicationFactory()
+    {
+        // Integration tests should never try to contact Azure Key Vault.
+        // In Visual Studio's test runner, DefaultAzureCredential can attempt to use Visual Studio/VS Code
+        // credentials which may block/hang the IDE.
+        Environment.SetEnvironmentVariable("AZURE_KEY_VAULT_ENDPOINT", null);
+        Environment.SetEnvironmentVariable("AZURE_KEY_VAULT_URL", null);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        builder.ConfigureLogging(logging =>
+        {
+            // Keep the VS test runner responsive (avoid flooding the Output window with Debug/Info logs).
+            logging.ClearProviders();
+            logging.SetMinimumLevel(LogLevel.Warning);
+        });
 
         builder.ConfigureServices(services =>
         {
@@ -34,7 +53,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<AIExamForgeDbContext>(options =>
             {
-                options.UseInMemoryDatabase("AIExamForge_IntegrationTests");
+                options.UseInMemoryDatabase(_dbName);
                 options.UseInternalServiceProvider(inMemoryProvider);
             });
 
@@ -54,6 +73,16 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
+            // Ensure any Azure Key Vault configuration source is removed for test runs.
+            // (Key vault access can hang when DefaultAzureCredential tries IDE-linked credentials.)
+            var keyVaultSources = config.Sources
+                .Where(s => (s.GetType().FullName ?? string.Empty).Contains("AzureKeyVault", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var source in keyVaultSources)
+            {
+                config.Sources.Remove(source);
+            }
+
             // Provide minimal configuration required for app startup.
             // The API currently throws if DefaultConnection is missing.
             var overrides = new Dictionary<string, string?>

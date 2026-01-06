@@ -22,7 +22,7 @@ public sealed class SchemaValidatorTests
             .Returns("""
                 {
                   "type": "object",
-                  "properties": { "x": { "type": "string" } },
+                                    "properties": { "x": { "type": "string" }, "content": { "type": "object" } },
                   "required": ["x"]
                 }
                 """);
@@ -39,7 +39,7 @@ public sealed class SchemaValidatorTests
 
         var sut = CreateSut(registry, logger);
 
-        var result = await sut.ValidateQuestionAsync("{\"x\":\"a\",\"y\":\"b\"}", "M1");
+        var result = await sut.ValidateQuestionAsync("{\"x\":\"a\",\"content\":{\"y\":\"b\"}}", "M1");
 
         result.IsValid.Should().BeTrue();
         result.SchemaErrors.Should().BeEmpty();
@@ -56,7 +56,7 @@ public sealed class SchemaValidatorTests
             .Returns("""
                 {
                   "type": "object",
-                  "properties": { "x": { "type": "string" } },
+                                    "properties": { "x": { "type": "string" }, "content": { "type": "object" } },
                   "required": ["x"]
                 }
                 """);
@@ -73,7 +73,7 @@ public sealed class SchemaValidatorTests
 
         var sut = CreateSut(registry, logger);
 
-        var result = await sut.ValidateQuestionAsync("{\"y\":\"b\"}", "M1");
+        var result = await sut.ValidateQuestionAsync("{\"content\":{\"y\":\"b\"}}", "M1");
 
         result.IsValid.Should().BeFalse();
         result.SchemaErrors.Should().Contain(e => e.SchemaKeyword == "PropertyRequired");
@@ -87,7 +87,7 @@ public sealed class SchemaValidatorTests
 
         registry
             .Setup(r => r.GetBaseQuestionSchema())
-            .Returns("{ \"type\": \"object\" }");
+            .Returns("{ \"type\": \"object\", \"properties\": { \"content\": { \"type\": \"object\" } } }");
 
         registry
             .Setup(r => r.GetSchema("M1"))
@@ -95,7 +95,7 @@ public sealed class SchemaValidatorTests
 
         var sut = CreateSut(registry, logger);
 
-        var result = await sut.ValidateQuestionAsync("{}", "M1");
+        var result = await sut.ValidateQuestionAsync("{\"content\":{}}", "M1");
 
         result.IsValid.Should().BeFalse();
         result.SchemaErrors.Should().ContainSingle(e => e.Message.Contains("Schema not available for item type: M1"));
@@ -142,5 +142,79 @@ public sealed class SchemaValidatorTests
         result.IsValid.Should().BeFalse();
         result.SchemaErrors.Should().NotBeEmpty();
         result.SchemaErrors.Should().AllSatisfy(e => e.Message.Should().StartWith("[M1] "));
+    }
+
+    [Fact]
+    public async Task ValidateQuestionAsync_WhenContentOnlyJson_SkipsBaseSchemaAndValidatesItemType()
+    {
+        var registry = new Mock<IItemTypeRegistry>(MockBehavior.Strict);
+        var logger = new Mock<ILogger<SchemaValidator>>();
+
+        // Base schema should NOT be called for content-only JSON.
+        registry
+            .Setup(r => r.GetSchema("M1"))
+            .Returns("""
+                {
+                  "type": "object",
+                  "properties": { "y": { "type": "string" } },
+                  "required": ["y"]
+                }
+                """);
+
+        var sut = CreateSut(registry, logger);
+
+        var result = await sut.ValidateQuestionAsync("{\"y\":\"b\"}", "M1");
+
+        result.IsValid.Should().BeTrue();
+        result.SchemaErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ValidateItemTypeSchemaAsync_WhenSchemaHasAiexamforgeRefs_ResolvesLocally()
+    {
+        var registry = new Mock<IItemTypeRegistry>(MockBehavior.Strict);
+        var logger = new Mock<ILogger<SchemaValidator>>();
+
+        static string FindM1SchemaPath()
+        {
+            const int maxParents = 15;
+            var current = new DirectoryInfo(AppContext.BaseDirectory);
+            for (var i = 0; i < maxParents && current != null; i++)
+            {
+                var candidate = Path.Combine(current.FullName, "docs", "schemas", "common", "item-types", "M1.schema.json");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+
+            throw new FileNotFoundException("Could not locate docs/schemas/common/item-types/M1.schema.json from the test base directory.");
+        }
+
+        var m1SchemaPath = FindM1SchemaPath();
+        registry
+            .Setup(r => r.GetSchema("M1"))
+            .Returns(File.ReadAllText(m1SchemaPath));
+
+        var sut = CreateSut(registry, logger);
+
+        var json = """
+        {
+          "choices": [
+            { "key": "A", "text": "A" },
+            { "key": "B", "text": "B" },
+            { "key": "C", "text": "C" }
+          ],
+          "correctChoiceKey": "A",
+          "randomizeChoices": true
+        }
+        """;
+
+        var result = await sut.ValidateItemTypeSchemaAsync(json, "M1");
+
+        result.IsValid.Should().BeTrue();
+        result.SchemaErrors.Should().BeEmpty();
     }
 }

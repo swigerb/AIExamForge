@@ -6,9 +6,11 @@ using AIExamForge.Application.Parsing.DTOs;
 namespace AIExamForge.IntegrationTests;
 
 public sealed class AuthorizationNegativeTests(UnauthenticatedApiWebApplicationFactory factory)
-    : IClassFixture<UnauthenticatedApiWebApplicationFactory>
+    : IClassFixture<UnauthenticatedApiWebApplicationFactory>, IDisposable
 {
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Outlines_Parse_Unauthenticated_Returns401()

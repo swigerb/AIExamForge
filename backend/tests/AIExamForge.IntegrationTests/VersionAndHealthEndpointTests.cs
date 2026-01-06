@@ -3,9 +3,11 @@ using System.Net.Http.Json;
 
 namespace AIExamForge.IntegrationTests;
 
-public sealed class VersionAndHealthEndpointTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
+public sealed class VersionAndHealthEndpointTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>, IDisposable
 {
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Get_Version_ReturnsOk()

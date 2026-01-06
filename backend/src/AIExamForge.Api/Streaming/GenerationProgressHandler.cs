@@ -13,6 +13,7 @@ public sealed class GenerationProgressHandler
 {
     private readonly ConcurrentDictionary<Guid, List<StreamWriter>> _connections = new();
     private readonly ConcurrentDictionary<Guid, string> _lastEventByGeneration = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _sendGates = new();
     private readonly ILogger<GenerationProgressHandler> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -45,23 +46,30 @@ public sealed class GenerationProgressHandler
     /// If this generation has already produced an event, replay it for a newly-joined connection.
     /// This prevents clients from getting stuck if they subscribe after an early failure/completion.
     /// </summary>
-    public bool TryReplayLastEvent(Guid generationId, StreamWriter writer)
+    public async Task<bool> TryReplayLastEventAsync(Guid generationId, StreamWriter writer, CancellationToken cancellationToken = default)
     {
         if (!_lastEventByGeneration.TryGetValue(generationId, out var lastEvent))
         {
             return false;
         }
 
+        var gate = _sendGates.GetOrAdd(generationId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+
         try
         {
-            writer.Write(lastEvent);
-            writer.Flush();
+            await writer.WriteAsync(lastEvent);
+            await writer.FlushAsync();
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to replay last SSE event for generation {GenerationId}", generationId);
             return false;
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 
@@ -140,16 +148,25 @@ public sealed class GenerationProgressHandler
             return;
         }
 
+        var gate = _sendGates.GetOrAdd(generationId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+
         List<StreamWriter> failedWriters = [];
 
-        lock (writers)
+        try
         {
-            foreach (var writer in writers.ToArray()) // Copy to avoid collection modified during iteration
+            StreamWriter[] snapshot;
+            lock (writers)
+            {
+                snapshot = writers.ToArray();
+            }
+
+            foreach (var writer in snapshot)
             {
                 try
                 {
-                    // Write synchronously to maintain order, but use async flush
-                    writer.Write(sseMessage);
+                    await writer.WriteAsync(sseMessage);
+                    await writer.FlushAsync();
                 }
                 catch (Exception ex)
                 {
@@ -158,39 +175,15 @@ public sealed class GenerationProgressHandler
                 }
             }
         }
-
-        // Flush all writers asynchronously
-        var flushTasks = new List<Task>();
-        lock (writers)
+        finally
         {
-            foreach (var writer in writers.Where(w => !failedWriters.Contains(w)))
-            {
-                flushTasks.Add(FlushWriterAsync(writer, generationId, failedWriters));
-            }
+            gate.Release();
         }
-
-        await Task.WhenAll(flushTasks);
 
         // Remove failed connections
         foreach (var failedWriter in failedWriters)
         {
             RemoveConnection(generationId, failedWriter);
-        }
-    }
-
-    private async Task FlushWriterAsync(StreamWriter writer, Guid generationId, List<StreamWriter> failedWriters)
-    {
-        try
-        {
-            await writer.FlushAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to flush SSE connection for generation {GenerationId}", generationId);
-            lock (failedWriters)
-            {
-                failedWriters.Add(writer);
-            }
         }
     }
 
@@ -222,5 +215,10 @@ public sealed class GenerationProgressHandler
         }
 
         _lastEventByGeneration.TryRemove(generationId, out _);
+
+        if (_sendGates.TryRemove(generationId, out var gate))
+        {
+            gate.Dispose();
+        }
     }
 }

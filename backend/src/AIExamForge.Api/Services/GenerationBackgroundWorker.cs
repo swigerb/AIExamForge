@@ -68,7 +68,7 @@ public sealed class GenerationBackgroundWorker(
                     var pct = p.PercentComplete ?? 0;
                     await progressHandler.SendProgressAsync(item.GenerationId, pct, p.Message);
                 },
-                CancellationToken.None);
+                stoppingToken);
 
             logger.LogInformation("Background generation finished for {GenerationId}", item.GenerationId);
         }
@@ -81,12 +81,12 @@ public sealed class GenerationBackgroundWorker(
                 // Persist failure so polling can see it even if generation never truly started.
                 await using var failScope = scopeFactory.CreateAsyncScope();
                 var uow = failScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var existing = await uow.GenerationRequests.GetByIdAsync(item.GenerationId, CancellationToken.None);
+                var existing = await uow.GenerationRequests.GetByIdAsync(item.GenerationId, stoppingToken);
                 if (existing != null)
                 {
                     existing.Fail($"Error: {ex.Message}");
-                    await uow.GenerationRequests.UpdateAsync(existing, CancellationToken.None);
-                    await uow.SaveChangesAsync(CancellationToken.None);
+                    await uow.GenerationRequests.UpdateAsync(existing, stoppingToken);
+                    await uow.SaveChangesAsync(stoppingToken);
                 }
             }
             catch

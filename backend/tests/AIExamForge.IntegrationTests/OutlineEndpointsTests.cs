@@ -5,9 +5,11 @@ using AIExamForge.Application.Parsing.DTOs;
 
 namespace AIExamForge.IntegrationTests;
 
-public sealed class OutlineEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
+public sealed class OutlineEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>, IDisposable
 {
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Post_Parse_EmptyText_ReturnsBadRequest()

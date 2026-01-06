@@ -162,15 +162,29 @@ public sealed class QuestionValidationPipeline
         var rationale = root.TryGetProperty("rationale", out var ratProp) ? ratProp.GetString() : null;
 
         var choices = new List<string>();
-        if (root.TryGetProperty("content", out var content) &&
-            content.TryGetProperty("choices", out var choicesArray) &&
-            choicesArray.ValueKind == JsonValueKind.Array)
+        if (root.TryGetProperty("content", out var content))
         {
-            foreach (var choice in choicesArray.EnumerateArray())
+            // content is expected to be an object, but some generators accidentally emit it as a JSON string.
+            if (content.ValueKind == JsonValueKind.String)
             {
-                if (choice.TryGetProperty("text", out var text))
+                var s = content.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
                 {
-                    choices.Add(text.GetString() ?? "");
+                    using var contentDoc = JsonDocument.Parse(s);
+                    content = contentDoc.RootElement;
+                }
+            }
+
+            if (content.ValueKind == JsonValueKind.Object &&
+                content.TryGetProperty("choices", out var choicesArray) &&
+                choicesArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var choice in choicesArray.EnumerateArray())
+                {
+                    if (choice.TryGetProperty("text", out var text))
+                    {
+                        choices.Add(text.GetString() ?? "");
+                    }
                 }
             }
         }

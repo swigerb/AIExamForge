@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AIExamForge.Application.Generation.DTOs;
 using AIExamForge.Application.Generation.Interfaces;
 using AIExamForge.Application.Mcp;
@@ -33,6 +34,12 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
     private readonly IOutlineRepository _outlineRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<QuestionGenerationService> _logger;
+
+    private static readonly JsonSerializerOptions SchemaValidationJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     private const int MaxRetryAttempts = 3;
 
@@ -493,7 +500,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             {
                 try
                 {
-                    var itemType = ItemTypeCode.Create(parsed.ItemType ?? "M1");
+                    var itemType = ItemTypeCode.Create(parsed.ItemTypeCode ?? "M1");
 
                     // Create tags with proper required fields
                     var tags = QuestionTags.Create(
@@ -504,7 +511,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
                     // Create scoring based on item type
                     var scoring = itemType.IsDichotomous
-                        ? QuestionScoring.Dichotomous(parsed.Scoring?.MaxPoints ?? 1)
+                        ? QuestionScoring.Dichotomous(1)
                         : QuestionScoring.Polytomous(parsed.Scoring?.MaxPoints ?? 1);
 
                     var difficulty = Enum.TryParse<QuestionDifficulty>(parsed.Difficulty, true, out var d)
@@ -518,7 +525,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
                         difficulty,
                         tags,
                         scoring,
-                        JsonSerializer.Serialize(parsed.Content),
+                        NormalizeContentJson(parsed.Content),
                         questionSet.Id,
                         orderIndex++,
                         parsed.Instruction,
@@ -541,13 +548,54 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         ParsedQuestion parsed,
         CancellationToken cancellationToken)
     {
-        var result = new QuestionValidationResult(parsed.Id ?? Guid.NewGuid().ToString());
+        parsed.Id ??= Guid.NewGuid().ToString("N");
+        var result = new QuestionValidationResult(parsed.Id);
+
+        var itemTypeCode = parsed.ItemTypeCode ?? "M1";
+        ItemTypeCode itemType;
+        try
+        {
+            itemType = ItemTypeCode.Create(itemTypeCode);
+        }
+        catch
+        {
+            itemTypeCode = "M1";
+            itemType = ItemTypeCode.Create(itemTypeCode);
+        }
+
+        var difficulty = NormalizeDifficultyForSchema(parsed.Difficulty);
+
+        var normalizedContent = NormalizeContentElement(parsed.Content);
+
+        var questionForSchema = new
+        {
+            id = parsed.Id,
+            itemTypeCode,
+            title = parsed.Title,
+            stem = parsed.Stem,
+            instruction = parsed.Instruction,
+            difficulty,
+            tags = new
+            {
+                exam = parsed.Tags?.Exam,
+                objective = parsed.Tags?.Objective,
+                section = parsed.Tags?.Section,
+                topics = parsed.Tags?.Topics.Count > 0 ? parsed.Tags.Topics : null
+            },
+            scoring = new
+            {
+                model = itemType.IsDichotomous ? "dichotomous" : "polytomous",
+                maxPoints = parsed.Scoring?.MaxPoints ?? 1
+            },
+            content = normalizedContent,
+            rationale = parsed.Rationale
+        };
 
         // Schema validation
-        var questionJson = JsonSerializer.Serialize(parsed);
+        var questionJson = JsonSerializer.Serialize(questionForSchema, SchemaValidationJsonOptions);
         var schemaResult = await _schemaValidator.ValidateQuestionAsync(
             questionJson,
-            parsed.ItemType ?? "M1",
+            itemTypeCode,
             cancellationToken);
 
         if (!schemaResult.IsValid)
@@ -559,7 +607,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         }
 
         // Lint validation - extract choices from content if available
-        var choices = ExtractChoicesFromContent(parsed.Content);
+        var choices = ExtractChoicesFromContent(normalizedContent);
 
         var lintViolations = _lintValidator.ValidateQuestion(
             parsed.Stem ?? "",
@@ -575,8 +623,67 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         return result;
     }
 
+    private static string NormalizeDifficultyForSchema(string? difficulty)
+    {
+        if (string.IsNullOrWhiteSpace(difficulty))
+        {
+            return "medium";
+        }
+
+        var trimmed = difficulty.Trim();
+        if (string.Equals(trimmed, "easy", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "medium", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "hard", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed.ToLowerInvariant();
+        }
+
+        return Enum.TryParse<QuestionDifficulty>(trimmed, true, out var parsed)
+            ? parsed.ToString().ToLowerInvariant()
+            : "medium";
+    }
+
+    private static JsonElement? NormalizeContentElement(JsonElement? content)
+    {
+        if (content is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (content.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+            {
+                return content.Value.Clone();
+            }
+
+            if (content.Value.ValueKind == JsonValueKind.String)
+            {
+                var s = content.Value.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
+                {
+                    using var doc = JsonDocument.Parse(s);
+                    return doc.RootElement.Clone();
+                }
+            }
+
+            return content.Value.Clone();
+        }
+        catch
+        {
+            return content.Value.Clone();
+        }
+    }
+
+    private static string NormalizeContentJson(JsonElement? content)
+    {
+        var normalized = NormalizeContentElement(content);
+        return normalized is null ? "null" : normalized.Value.GetRawText();
+    }
+
     private static List<string> ExtractChoicesFromContent(JsonElement? content)
     {
+        content = NormalizeContentElement(content);
         if (content is null || content.Value.ValueKind != JsonValueKind.Object)
         {
             return [];
@@ -619,29 +726,64 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
 
     private sealed class ParsedQuestion
     {
+        [JsonPropertyName("id")]
         public string? Id { get; set; }
-        public string? ItemType { get; set; }
+
+        [JsonPropertyName("itemTypeCode")]
+        public string? ItemTypeCode { get; set; }
+
+        // Back-compat: allow older prompts to send "itemType".
+        [JsonPropertyName("itemType")]
+        public string? ItemType { set => ItemTypeCode = value; }
+
+        [JsonPropertyName("title")]
         public string? Title { get; set; }
+
+        [JsonPropertyName("stem")]
         public string? Stem { get; set; }
+
+        [JsonPropertyName("instruction")]
         public string? Instruction { get; set; }
+
+        [JsonPropertyName("difficulty")]
         public string? Difficulty { get; set; }
+
+        [JsonPropertyName("tags")]
         public ParsedTags? Tags { get; set; }
+
+        [JsonPropertyName("scoring")]
         public ParsedScoring? Scoring { get; set; }
+
+        [JsonPropertyName("content")]
         public JsonElement? Content { get; set; }
+
+        [JsonPropertyName("rationale")]
         public string? Rationale { get; set; }
     }
 
     private sealed class ParsedTags
     {
+        [JsonPropertyName("topics")]
         public List<string> Topics { get; set; } = [];
+
+        [JsonPropertyName("exam")]
         public string? Exam { get; set; }
+
+        [JsonPropertyName("objective")]
         public string? Objective { get; set; }
+
+        [JsonPropertyName("section")]
         public string? Section { get; set; }
     }
 
     private sealed class ParsedScoring
     {
+        [JsonPropertyName("maxPoints")]
         public int MaxPoints { get; set; } = 1;
+
+        // Optional; schema validation derives this from item type if absent.
+        [JsonPropertyName("model")]
+        public string? Model { get; set; }
     }
 
     #endregion
@@ -816,7 +958,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
         var parsedQuestion = parsedQuestions[0];
 
         // Create new question entity
-        var itemType = ItemTypeCode.Create(parsedQuestion.ItemType ?? targetQuestion.ItemType.Code);
+        var itemType = ItemTypeCode.Create(parsedQuestion.ItemTypeCode ?? targetQuestion.ItemType.Code);
         var tags = QuestionTags.Create(
             exam: parsedQuestion.Tags?.Exam ?? targetQuestion.Tags.Exam,
             objective: parsedQuestion.Tags?.Objective ?? targetQuestion.Tags.Objective,
@@ -824,7 +966,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             topics: parsedQuestion.Tags?.Topics ?? targetQuestion.Tags.Topics.ToList());
 
         var scoring = itemType.IsDichotomous
-            ? QuestionScoring.Dichotomous(parsedQuestion.Scoring?.MaxPoints ?? 1)
+            ? QuestionScoring.Dichotomous(1)
             : QuestionScoring.Polytomous(parsedQuestion.Scoring?.MaxPoints ?? 1);
 
         var difficulty = Enum.TryParse<QuestionDifficulty>(parsedQuestion.Difficulty, true, out var diff)
@@ -832,7 +974,7 @@ public sealed class QuestionGenerationService : Interfaces.IQuestionGenerationSe
             : targetQuestion.Difficulty;
 
         var contentJson = parsedQuestion.Content.HasValue
-            ? JsonSerializer.Serialize(parsedQuestion.Content.Value)
+            ? NormalizeContentJson(parsedQuestion.Content)
             : targetQuestion.ContentJson;
 
         var newQuestion = Question.Create(

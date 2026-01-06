@@ -3,6 +3,7 @@ using AIExamForge.Domain.Interfaces;
 using AIExamForge.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using NJsonSchema;
+using System.Text.Json;
 
 namespace AIExamForge.Application.Validation;
 
@@ -13,6 +14,7 @@ public sealed class SchemaValidator : ISchemaValidator
 {
     private readonly IItemTypeRegistry _itemTypeRegistry;
     private readonly ILogger<SchemaValidator> _logger;
+    private readonly string _schemasBasePath;
     private readonly Dictionary<string, JsonSchema> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
     private JsonSchema? _baseSchema;
 
@@ -22,6 +24,7 @@ public sealed class SchemaValidator : ISchemaValidator
     {
         _itemTypeRegistry = itemTypeRegistry;
         _logger = logger;
+        _schemasBasePath = FindSchemasBasePath(AppContext.BaseDirectory);
     }
 
     public async Task<ValidationResult> ValidateQuestionAsync(
@@ -31,15 +34,55 @@ public sealed class SchemaValidator : ISchemaValidator
     {
         var allErrors = new List<SchemaError>();
 
-        // First validate against base schema
-        var baseResult = await ValidateBaseSchemaAsync(questionJson, cancellationToken);
-        if (!baseResult.IsValid)
+        // Some callers pass the full question object (with a "content" property), while others
+        // (e.g., question editing) pass only the item-type-specific content JSON.
+        // We support both:
+        // - Full question JSON: validate base schema against full object, then validate item-type schema against content.
+        // - Content-only JSON: validate only against item-type schema.
+        string? contentJson = null;
+        try
         {
-            allErrors.AddRange(baseResult.SchemaErrors);
+            using var doc = JsonDocument.Parse(questionJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("content", out var contentElement))
+            {
+                if (contentElement.ValueKind == JsonValueKind.String)
+                {
+                    var s = contentElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                    {
+                        using var contentDoc = JsonDocument.Parse(s);
+                        contentJson = contentDoc.RootElement.GetRawText();
+                    }
+                    else
+                    {
+                        contentJson = contentElement.GetRawText();
+                    }
+                }
+                else
+                {
+                    contentJson = contentElement.GetRawText();
+                }
+            }
+        }
+        catch
+        {
+            // Schema validation will surface invalid JSON.
+        }
+
+        if (contentJson is not null)
+        {
+            // Full question JSON: validate against base schema first.
+            var baseResult = await ValidateBaseSchemaAsync(questionJson, cancellationToken);
+            if (!baseResult.IsValid)
+            {
+                allErrors.AddRange(baseResult.SchemaErrors);
+            }
         }
 
         // Then validate against item type-specific schema
-        var itemTypeResult = await ValidateItemTypeSchemaAsync(questionJson, itemTypeCode, cancellationToken);
+        var itemTypePayload = contentJson ?? questionJson;
+        var itemTypeResult = await ValidateItemTypeSchemaAsync(itemTypePayload, itemTypeCode, cancellationToken);
         if (!itemTypeResult.IsValid)
         {
             allErrors.AddRange(itemTypeResult.SchemaErrors);
@@ -133,7 +176,11 @@ public sealed class SchemaValidator : ISchemaValidator
         try
         {
             var schemaJson = _itemTypeRegistry.GetBaseQuestionSchema();
-            _baseSchema = await JsonSchema.FromJsonAsync(schemaJson, cancellationToken);
+            _baseSchema = await JsonSchema.FromJsonAsync(
+                schemaJson,
+                documentPath: "https://aiexamforge/schemas/common/question-base.schema.json",
+                referenceResolverFactory: root => new AiExamForgeSchemaReferenceResolver(root, _logger, _schemasBasePath),
+                cancellationToken: cancellationToken);
             return _baseSchema;
         }
         catch (Exception ex)
@@ -155,7 +202,11 @@ public sealed class SchemaValidator : ISchemaValidator
         try
         {
             var schemaJson = _itemTypeRegistry.GetSchema(itemTypeCode);
-            var schema = await JsonSchema.FromJsonAsync(schemaJson, cancellationToken);
+            var schema = await JsonSchema.FromJsonAsync(
+                schemaJson,
+                documentPath: $"https://aiexamforge/schemas/item-types/{itemTypeCode}.schema.json",
+                referenceResolverFactory: root => new AiExamForgeSchemaReferenceResolver(root, _logger, _schemasBasePath),
+                cancellationToken: cancellationToken);
             _schemaCache[itemTypeCode] = schema;
             return schema;
         }
@@ -164,5 +215,26 @@ public sealed class SchemaValidator : ISchemaValidator
             _logger.LogError(ex, "Failed to load schema for item type {ItemTypeCode}", itemTypeCode);
             return null;
         }
+    }
+
+    private static string FindSchemasBasePath(string basePath)
+    {
+        // We expect docs/schemas/common in the repo root.
+        const int maxParents = 15;
+
+        var current = new DirectoryInfo(basePath);
+        for (var i = 0; i < maxParents && current != null; i++)
+        {
+            var schemas = Path.Combine(current.FullName, "docs", "schemas", "common");
+            if (Directory.Exists(schemas))
+            {
+                return schemas;
+            }
+
+            current = current.Parent;
+        }
+
+        // Best-effort fallback (may fail in unusual hosting environments)
+        return Path.Combine(basePath, "docs", "schemas", "common");
     }
 }

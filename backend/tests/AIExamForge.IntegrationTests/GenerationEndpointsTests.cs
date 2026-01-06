@@ -7,10 +7,12 @@ using DtoRenderMode = AIExamForge.Application.Generation.DTOs.RenderMode;
 
 namespace AIExamForge.IntegrationTests;
 
-public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
+public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>, IDisposable
 {
     private readonly ApiWebApplicationFactory _factory = factory;
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Get_Generation_Unknown_ReturnsNotFound()
@@ -162,9 +164,35 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/event-stream", resp.Content.Headers.ContentType?.MediaType);
 
-        var text = await resp.Content.ReadAsStringAsync();
-        Assert.Contains("event: progress", text);
-        Assert.Contains("event: complete", text);
+        // Bound the read so a buggy/long-lived SSE stream can't hang the test runner/IDE.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
+        using var reader = new StreamReader(stream);
+
+        var sawProgress = false;
+        var sawComplete = false;
+        while (!reader.EndOfStream && !cts.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(cts.Token);
+            if (line is null)
+            {
+                break;
+            }
+
+            if (line.Contains("event: progress", StringComparison.Ordinal))
+            {
+                sawProgress = true;
+            }
+
+            if (line.Contains("event: complete", StringComparison.Ordinal))
+            {
+                sawComplete = true;
+                break;
+            }
+        }
+
+        Assert.True(sawProgress, "Expected at least one progress SSE event.");
+        Assert.True(sawComplete, "Expected a complete SSE event.");
     }
 
     [Fact]

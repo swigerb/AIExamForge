@@ -284,7 +284,7 @@ Creates a new question set, keeping the original for comparison.
 
         // If generation already produced an event (e.g., failed quickly before the client subscribed),
         // replay it so the UI doesn't get stuck waiting forever.
-        var replayed = progressHandler.TryReplayLastEvent(generationId, writer);
+        var replayed = await progressHandler.TryReplayLastEventAsync(generationId, writer, cancellationToken);
 
         try
         {

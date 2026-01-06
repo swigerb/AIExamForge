@@ -6,10 +6,12 @@ using AIExamForge.Domain.ValueObjects;
 
 namespace AIExamForge.IntegrationTests;
 
-public sealed class ExportEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
+public sealed class ExportEndpointsTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>, IDisposable
 {
     private readonly ApiWebApplicationFactory _factory = factory;
     private readonly HttpClient _client = factory.CreateClient();
+
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Get_ExportFormats_ReturnsOk()

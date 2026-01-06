@@ -138,7 +138,7 @@ public sealed partial class LintValidator : ILintValidator
         }
 
         // Check minimum answer choices (section 3.1)
-        if (choiceList.Count < 3)
+        if (choiceList.Count > 0 && choiceList.Count < 3)
         {
             violations.Add(new LintViolation
             {
