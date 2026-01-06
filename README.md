@@ -119,16 +119,11 @@ Option A: Use the Aspire dashboard command (if you have the Aspire CLI/workload 
 dotnet aspire dashboard
 ```
 
-Option B: Use Docker (requires Docker Desktop to be running):
+Option B: Use Docker terminal (requires Docker Desktop to be running):
 
 ```bash
-docker run --rm -it \
-  -p 18888:18888 \
-  -p 18889:18889 \
-  mcr.microsoft.com/dotnet/aspire-dashboard:8.0
+docker run --rm -it -p 18888:18888 -p 18889:18889 mcr.microsoft.com/dotnet/aspire-dashboard:latest
 ```
-
-If the image tag changes, use a newer tag (or `:latest`).
 
 #### 2. Run the API (Development)
 
