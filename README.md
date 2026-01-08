@@ -430,7 +430,7 @@ AIExamForge relies on the Model Context Protocol (MCP) to retrieve content from 
 
 ## License
 
-This project is for educational and practice purposes only. Generated questions are practice materials and should not be used as actual certification exam content.
+Licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Contributing
 
