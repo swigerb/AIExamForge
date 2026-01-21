@@ -159,8 +159,15 @@ builder.Services.AddCors(options =>
             policy
                 .SetIsOriginAllowed(origin =>
                 {
-                    if (string.IsNullOrWhiteSpace(origin)) return false;
-                    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+                    if (string.IsNullOrWhiteSpace(origin))
+                    {
+                        return false;
+                    }
+
+                    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                    {
+                        return false;
+                    }
 
                     return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
                         || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
