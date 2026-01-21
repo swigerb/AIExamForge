@@ -90,7 +90,21 @@ Environment variable alternatives (recommended for local dev):
 - `AzureOpenAI__DeploymentName`
 - `AzureOpenAI__ApiKey`
 
-#### 3. Run API
+#### 3. Run via Aspire AppHost (recommended)
+
+This starts:
+
+- the Aspire Dashboard
+- the API
+- the Vite frontend (if Node/npm are installed and `frontend/` dependencies are installed)
+
+```bash
+dotnet run --project backend/src/AIExamForge.AppHost
+```
+
+Then open the frontend from the Aspire dashboard (look for **Open Frontend**).
+
+#### 4. Run API (standalone)
 
 ```bash
 # From repo root:
@@ -154,7 +168,7 @@ Useful spans/tags to filter on:
 - Tag: `mcp.tool.name` (tool being called)
 - Tag: `mcp.query_id` (correlates all tool calls for one query)
 
-#### 4. Frontend Setup
+#### 5. Frontend Setup (standalone)
 
 ```bash
 cd frontend

@@ -29,6 +29,13 @@ if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("OpenT
         ?? Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
         ?? "http://localhost:18889"; // Aspire Dashboard OTLP gRPC default
 
+    // Aspire dashboard commonly uses OTLP/gRPC over http:// (h2c) in local dev.
+    // .NET requires enabling unencrypted HTTP/2 support for this scenario.
+    if (otlpEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+    {
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+    }
+
     var resourceBuilder = ResourceBuilder.CreateDefault()
         .AddService(serviceName: serviceName, serviceVersion: "1.0.0")
         .AddAttributes(new Dictionary<string, object>
@@ -145,6 +152,27 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
+        // In development the SPA may run on varying ports (Vite, Aspire, etc.).
+        // Allow loopback origins broadly to keep fetch + SSE working.
+        if (builder.Environment.IsDevelopment())
+        {
+            policy
+                .SetIsOriginAllowed(origin =>
+                {
+                    if (string.IsNullOrWhiteSpace(origin)) return false;
+                    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+
+                    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                        || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                        || uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
+                })
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+
+            return;
+        }
+
         policy.WithOrigins(
                 builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:3000"])
             .AllowAnyMethod()
