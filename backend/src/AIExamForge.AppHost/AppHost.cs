@@ -1,6 +1,6 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-var api = builder.AddProject<Projects.AIExamForge_Api>("api")
+var api = builder.AddDotnetProject("api", Path.Combine("..", "AIExamForge.Api", "AIExamForge.Api.csproj"))
     .WithExternalHttpEndpoints();
 
 // Run the Vite dev server as an executable resource so it starts/stops with the AppHost.

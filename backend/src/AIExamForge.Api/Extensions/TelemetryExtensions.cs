@@ -1,6 +1,10 @@
-using Microsoft.ApplicationInsights.Extensibility;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace AIExamForge.Api.Extensions;
 
@@ -25,19 +29,17 @@ public static class TelemetryExtensions
                 options.ConnectionString = connectionString;
             }
 
-            // Enable adaptive sampling for cost control
-            options.EnableAdaptiveSampling = true;
-
-            // Enable dependency tracking for external calls (LLM, MCP, etc.)
-            options.EnableDependencyTrackingTelemetryModule = true;
-
-            // Enable request tracking
-            options.EnableRequestTrackingTelemetryModule = true;
+            options.TracesPerSecond = 5;
         });
 
-        // Add custom telemetry initializers
-        services.AddSingleton<ITelemetryInitializer, OperationCorrelationInitializer>();
-        services.AddSingleton<ITelemetryInitializer, CloudRoleNameInitializer>();
+        services.AddHttpContextAccessor();
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(
+                serviceName: "AIExamForge-Api",
+                serviceInstanceId: Environment.MachineName));
+        services.ConfigureOpenTelemetryTracerProvider((_, tracing) =>
+            tracing.AddProcessor<OperationCorrelationProcessor>());
+        services.Configure<OpenTelemetryLoggerOptions>(options => options.IncludeScopes = true);
 
         return services;
     }
@@ -55,18 +57,18 @@ public static class TelemetryExtensions
 }
 
 /// <summary>
-/// T160: Telemetry initializer that adds operation correlation IDs per FR-025, FR-027.
+/// T160: Enriches traces while OpenTelemetry supplies W3C operation correlation.
 /// </summary>
-public sealed class OperationCorrelationInitializer : ITelemetryInitializer
+public sealed class OperationCorrelationProcessor : BaseProcessor<Activity>
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public OperationCorrelationInitializer(IHttpContextAccessor httpContextAccessor)
+    public OperationCorrelationProcessor(IHttpContextAccessor httpContextAccessor)
     {
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public void Initialize(Microsoft.ApplicationInsights.Channel.ITelemetry telemetry)
+    public override void OnEnd(Activity activity)
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext is null)
@@ -78,39 +80,21 @@ public sealed class OperationCorrelationInitializer : ITelemetryInitializer
         if (httpContext.Items.TryGetValue("CorrelationId", out var correlationId) &&
             correlationId is string correlationIdStr)
         {
-            telemetry.Context.Operation.Id = correlationIdStr;
+            activity.SetTag("CorrelationId", correlationIdStr);
         }
 
         // Add user context if available
         if (httpContext.User.Identity?.IsAuthenticated == true)
         {
-            telemetry.Context.User.AuthenticatedUserId =
-                httpContext.User.Identity.Name ?? "anonymous";
+            activity.SetTag("enduser.id", httpContext.User.Identity.Name ?? "anonymous");
         }
 
         // Add generation context if available
         if (httpContext.Items.TryGetValue("GenerationId", out var generationId) &&
             generationId is Guid generationGuid)
         {
-            if (telemetry is Microsoft.ApplicationInsights.DataContracts.ISupportProperties supportProperties)
-            {
-                supportProperties.Properties["GenerationId"] = generationGuid.ToString();
-            }
+            activity.SetTag("GenerationId", generationGuid.ToString());
         }
-    }
-}
-
-/// <summary>
-/// Telemetry initializer that sets the cloud role name for distributed tracing.
-/// </summary>
-public sealed class CloudRoleNameInitializer : ITelemetryInitializer
-{
-    private const string CloudRoleName = "AIExamForge-Api";
-
-    public void Initialize(Microsoft.ApplicationInsights.Channel.ITelemetry telemetry)
-    {
-        telemetry.Context.Cloud.RoleName = CloudRoleName;
-        telemetry.Context.Cloud.RoleInstance = Environment.MachineName;
     }
 }
 

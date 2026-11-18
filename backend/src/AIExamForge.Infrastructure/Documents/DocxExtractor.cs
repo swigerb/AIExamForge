@@ -71,7 +71,7 @@ public sealed class DocxExtractor : IDocumentExtractor
 
         using var document = WordprocessingDocument.Open(stream, false);
         
-        var body = document.MainDocumentPart?.Document.Body;
+        var body = document.MainDocumentPart?.Document?.Body;
         if (body == null)
         {
             return DocumentExtractionResult.Failed("Document body not found");
