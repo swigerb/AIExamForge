@@ -978,7 +978,7 @@ public sealed partial class McpClient
 
         JsonRpcResponse<TResult>? lastResponse = null;
 
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(cancellationToken);
             if (line == null)

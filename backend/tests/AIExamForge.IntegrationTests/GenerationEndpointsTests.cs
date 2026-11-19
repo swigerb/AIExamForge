@@ -171,7 +171,7 @@ public sealed class GenerationEndpointsTests(ApiWebApplicationFactory factory) :
 
         var sawProgress = false;
         var sawComplete = false;
-        while (!reader.EndOfStream && !cts.IsCancellationRequested)
+        while (!cts.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(cts.Token);
             if (line is null)

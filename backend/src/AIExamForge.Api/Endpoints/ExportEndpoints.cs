@@ -15,8 +15,7 @@ public static class ExportEndpoints
     public static IEndpointRouteBuilder MapExportEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/questions")
-            .WithTags("Export")
-            .WithOpenApi();
+            .WithTags("Export");
 
         group.MapGet("/{generationId}/export", ExportQuestionSet)
             .WithName("ExportQuestionSet")

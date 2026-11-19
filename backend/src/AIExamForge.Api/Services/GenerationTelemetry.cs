@@ -1,3 +1,4 @@
+using System.Globalization;
 using AIExamForge.Domain.ValueObjects;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -83,15 +84,12 @@ public sealed class ApplicationInsightsGenerationTelemetry : IGenerationTelemetr
             Properties =
             {
                 ["GenerationId"] = generationId.ToString(),
+                ["DurationMs"] = duration.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture),
                 ["QuestionsGenerated"] = questionsGenerated.ToString(),
                 ["QuestionsValidated"] = questionsValidated.ToString(),
                 ["ValidationSuccessRate"] = questionsGenerated > 0
                     ? ((double)questionsValidated / questionsGenerated * 100).ToString("F1")
                     : "0"
-            },
-            Metrics =
-            {
-                ["DurationMs"] = duration.TotalMilliseconds
             }
         };
 
@@ -163,14 +161,11 @@ public sealed class ApplicationInsightsGenerationTelemetry : IGenerationTelemetr
             Properties =
             {
                 ["GenerationId"] = generationId.ToString(),
+                ["DurationMs"] = duration.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture),
                 ["Topic"] = topic,
                 ["Success"] = success.ToString(),
                 ["CacheHit"] = cacheHit.ToString(),
                 ["EmptyResult"] = emptyResult.ToString()
-            },
-            Metrics =
-            {
-                ["DurationMs"] = duration.TotalMilliseconds
             }
         };
 
@@ -201,13 +196,10 @@ public sealed class ApplicationInsightsGenerationTelemetry : IGenerationTelemetr
             Properties =
             {
                 ["GenerationId"] = generationId.ToString(),
+                ["DurationMs"] = duration.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture),
                 ["Format"] = format.ToString(),
                 ["RenderMode"] = mode.ToString(),
                 ["Success"] = success.ToString()
-            },
-            Metrics =
-            {
-                ["DurationMs"] = duration.TotalMilliseconds
             }
         };
 
